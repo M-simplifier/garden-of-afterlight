@@ -1,0 +1,61 @@
+cabal-version: 3.8
+name: garden-of-afterlight
+version: 0.1.0.0
+build-type: Simple
+license: MIT
+license-file: LICENSE
+author: M-simplifier
+synopsis: Pure Haskell world rules and a Windows voxel garden host
+extra-source-files: README.md, tools/fixtures/garden-v3.txt
+
+flag native
+    description: Build the Windows host (external runtime assets required)
+    default: False
+    manual: True
+
+common shared-options
+    ghc-options: -Wall
+    default-language: GHC2021
+    hs-source-dirs: src
+    build-depends:
+        base >=4.18 && <4.22,
+        bytestring >=0.11 && <0.13,
+        containers >=0.6 && <0.8,
+        directory >=1.3 && <1.4,
+        filepath >=1.4 && <1.6,
+        h-raylib >=5.5 && <5.7,
+        reactive-banana >=1.3 && <1.4
+
+executable noema-garden
+    if !flag(native)
+        buildable: False
+    import: shared-options
+    main-is: GardenMain.hs
+    hs-source-dirs: tools, src
+    ghc-options: -O2 -threaded -rtsopts -with-rtsopts=-N2 -optl-mwindows
+    build-depends: Yampa >=0.15 && <0.16, time >=1.12 && <1.15
+    other-modules:
+        Garden.Types, Garden.World, Garden.Change, Garden.Checkpoint.Legacy, Garden.Render.Invalidation, Garden.Islands, Garden.Rules, Garden.Raycast,
+        Garden.View, Garden.Mesh, Garden.Clock, Garden.Signal, Garden.Tour,
+        Garden.Checkpoint, Garden.Input, Garden.Runtime, Garden.Photo,
+        Garden.Render, Garden.Render.Resources,
+        Garden.Audio, Garden.Soundscape
+
+executable noema-garden-audio
+    if !flag(native)
+        buildable: False
+    import: shared-options
+    ghc-options: -O2
+    main-is: GardenAudio.hs
+    hs-source-dirs: tools, src
+    other-modules: Garden.Audio, Garden.Soundscape, Garden.Types
+
+executable noema-garden-check
+    ghc-options: -Wall -O2
+    default-language: GHC2021
+    main-is: GardenCheck.hs
+    hs-source-dirs: tools, src
+    build-depends: base, bytestring, containers, Yampa, QuickCheck ==2.15.0.1
+    other-modules:
+        Garden.Types, Garden.World, Garden.Change, Garden.Checkpoint.Legacy, Garden.Render.Invalidation, Garden.Islands, Garden.Rules, Garden.Raycast,
+        Garden.Clock, Garden.Checkpoint, Garden.Signal, Garden.Tour, Garden.Mesh, Garden.Soundscape, Garden.Photo

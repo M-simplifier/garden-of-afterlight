@@ -1,0 +1,13 @@
+*
+!.gitignore
+!README.md
+!LICENSE
+!cabal.project
+!garden-of-afterlight.cabal
+!src/
+!src/**/
+!src/**/*.hs
+!tools/
+!tools/*.hs
+!tools/fixtures/
+!tools/fixtures/garden-v3.txt
