@@ -7,6 +7,10 @@ module Garden.Render.Resources
     acquireResources,
     releaseResources,
     withResources,
+    ChunkLoading,
+    beginChunkLoading,
+    stepChunkLoading,
+    chunkLoadingProgress,
     syncChunks,
     renderTarget,
     drawPrepared,
@@ -24,7 +28,6 @@ import Control.Exception (bracket, bracket_, bracketOnError, evaluate, finally, 
 import Control.Monad (forM_, unless)
 import Data.Char (ord)
 import Data.IORef
-import Data.List (nub)
 import Data.Map.Strict qualified as M
 import Data.Set qualified as S
 import Foreign (Ptr, castPtr, free, malloc, peek, poke, with, withArrayLen)
@@ -43,6 +46,7 @@ import Raylib.Internal (WindowResources, managed)
 import Raylib.Internal.Foreign (Freeable (rlFreeDependents), c'free)
 import Raylib.Types hiding (Material)
 import Raylib.Types qualified as RL
+import Raylib.Util.Math (matrixIdentity)
 
 data PreparedModel = PreparedModel !Model !(Ptr Model)
 
@@ -88,7 +92,8 @@ acquireResources window = mask_ $ do
       postShader <- shader (loadShader screenVertex (Just "assets/shaders/post.fs"))
       mapM_ (\s -> isShaderValid s >>= \ok -> unless ok (fail "A garden shader did not compile")) [worldShader, skyShader, postShader]
       glyphs <- readFile "assets/fonts/glyphs.txt"
-      font <- own (managed window (loadFontEx "assets/fonts/NotoSansCJKjp-Regular.otf" 48 (Just (nub ([32 .. 126] <> filter (>= 32) (map ord (glyphs <> uiCorpus))))))) (`unloadFont` window)
+      let codepoints = S.toAscList (S.fromList ([32 .. 126] <> filter (>= 32) (map ord (glyphs <> uiCorpus))))
+      font <- own (managed window (loadFontEx "assets/fonts/NotoSansCJKjp-Regular.otf" 48 (Just codepoints))) (`unloadFont` window)
       validFont <- isFontValid font
       unless validFont (fail "The Japanese font could not be loaded")
       _ <- setTextureFilter (font'texture font) TextureFilterBilinear
@@ -167,8 +172,19 @@ prepareModel window shader geometry = mask_ $ do
             mesh'vboId = Nothing
           }
   bracketOnError (uploadMesh mesh False) (`unloadMesh` window) $ \uploaded -> do
-    model <- loadModelFromMesh uploaded
-    let styled = model {model'materials = [m {material'shader = shader} | m <- model'materials model]}
+    material <- loadMaterialDefault
+    -- Match raylib's LoadModelFromMesh initialization directly, avoiding a
+    -- second marshal/readback of every uploaded vertex just to wrap the mesh.
+    let styled =
+          Model
+            { model'transform = matrixIdentity,
+              model'meshes = [uploaded],
+              model'materials = [material {material'shader = shader}],
+              model'meshMaterial = [0],
+              model'boneCount = 0,
+              model'bones = Nothing,
+              model'bindPose = Nothing
+            }
     bracketOnError malloc free $ \ptr -> do
       poke ptr styled
       ( do
@@ -195,7 +211,7 @@ prepareModel window shader geometry = mask_ $ do
 
 releaseModel :: WindowResources -> PreparedModel -> IO ()
 releaseModel window (PreparedModel model ptr) = do
-  -- loadModelFromMesh borrows raylib's default material; only own the mesh.
+  -- Only the mesh's GPU handles are owned here; material resources are borrowed.
   (rlFreeDependents model ptr `finally` free ptr)
     `finally` forM_ (model'meshes model) (`unloadMesh` window)
 
@@ -232,6 +248,52 @@ textWidth resources value size = do
   c'free (castPtr ptr)
   pure width
 
+-- Initial uploads may span callbacks. Each completed chunk immediately belongs
+-- to Resources, so cancellation releases even a partly constructed garden.
+-- Start once with freshly acquired Resources; do not call syncChunks until done.
+data ChunkLoading = ChunkLoading !Resources !SceneView !Int !(IORef (Int, [(Chunk, [(Cell, Material)])]))
+
+beginChunkLoading :: Resources -> SceneView -> IO ChunkLoading
+beginChunkLoading resources view = do
+  let grouped = M.fromListWith (<>) [(chunkOf cell, [(cell, material)]) | (cell, material) <- M.toList (sceneCells view)]
+  total <- evaluate (M.size grouped)
+  pending <- newIORef (0, M.toList grouped)
+  pure (ChunkLoading resources view total pending)
+
+chunkLoadingProgress :: ChunkLoading -> IO (Int, Int)
+chunkLoadingProgress (ChunkLoading _ _ total pending) = do
+  (done, _) <- readIORef pending
+  pure (done, total)
+
+-- At least one chunk is processed; a single chunk is the indivisible upload.
+-- The time budget bounds batches rather than assuming identical chunk costs.
+stepChunkLoading :: Double -> ChunkLoading -> IO Bool
+stepChunkLoading budget (ChunkLoading resources view _ pending) = mask_ $ do
+  began <- getTime
+  let advance = do
+        (done, remaining) <- readIORef pending
+        case remaining of
+          [] -> do
+            modifyIORef' (resourceChunks resources) (\(_, chunks) -> (sceneRevision view, chunks))
+            writeIORef (resourceLights resources) (sceneLights view)
+            pure True
+          (key, contents) : rest -> do
+            -- Keep acquisition and ownership registration in one masked span.
+            models <- prepareChunk resources view contents
+            modifyIORef' (resourceChunks resources) (\(revision, chunks) -> (revision, M.insert key models chunks))
+            writeIORef pending (done + 1, rest)
+            now <- getTime
+            if null rest || now - began < max 0.001 budget then advance else pure False
+  advance
+
+prepareChunk :: Resources -> SceneView -> [(Cell, Material)] -> IO [PreparedModel]
+prepareChunk resources view contents =
+  prepareGeometry (resourceWindow resources) (resourceShader resources)
+    (terrainGeometry (sceneCells view) contents <> ornamentGeometry (sceneCells view) contents)
+
+sceneLights :: SceneView -> [V3]
+sceneLights view = M.elems (M.fromList [((x `div` 3, y `div` 3, z `div` 3), center cell) | (cell@(Cell x y z), Luminous) <- M.toList (sceneCells view)])
+
 syncChunks :: Resources -> SceneView -> IO ()
 syncChunks resources view = mask $ \restore -> do
   (revision, old) <- readIORef (resourceChunks resources)
@@ -243,22 +305,14 @@ syncChunks resources view = mask $ \restore -> do
           changed = if rebuild then M.keys (M.union grouped (M.map (const []) old)) else S.toList (changedSince revision (sceneEdits view))
           entries key = if rebuild then M.findWithDefault [] key grouped else chunkEntries key (sceneCells view)
           prepare key = do
-            let contents = entries key
-                geometry = terrainGeometry (sceneCells view) contents <> ornamentGeometry (sceneCells view) contents
-            models <- prepareGeometry window (resourceShader resources) geometry
+            models <- prepareChunk resources view (entries key)
             pure (key, models)
       -- Prepare the entire replacement before publishing it or releasing old
       -- meshes. A failed upload leaves the currently owned map intact.
       fresh <- restore (acquireMany prepare (releaseModels window . snd) changed)
       let new = M.union (M.fromList fresh) old
       writeIORef (resourceChunks resources) (sceneRevision view, new)
-      writeIORef
-        (resourceLights resources)
-        ( M.elems
-            ( M.fromList
-                [((x `div` 3, y `div` 3, z `div` 3), center c) | (c@(Cell x y z), Luminous) <- M.toList (sceneCells view)]
-            )
-        )
+      writeIORef (resourceLights resources) (sceneLights view)
       releaseModels window (concatMap (\key -> M.findWithDefault [] key old) changed)
   where
     window = resourceWindow resources

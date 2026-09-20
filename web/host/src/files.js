@@ -60,7 +60,7 @@ function findDirectory(root, wanted, prefix = "") {
   return null;
 }
 
-export async function loadAssets(raylibFS, root, fetchFile = fetch) {
+export async function loadAssets(raylibFS, root, fetchFile = fetch, expect = () => {}) {
   const response = await fetchFile("./assets-manifest.json");
   if (response.status === 404) return { count: 0, bytes: 0, missingManifest: true };
   if (!response.ok) throw new Error(`Asset manifest: HTTP ${response.status}`);
@@ -75,6 +75,7 @@ export async function loadAssets(raylibFS, root, fetchFile = fetch) {
       throw new Error(`Invalid or duplicate asset path: ${path}`);
     }
     seen.add(path);
+    expect(path, entry.bytes);
   }
   if (manifest.length && !raylibFS) throw new Error("Export FS from Emscripten for asset loading");
   let cursor = 0;
@@ -85,8 +86,9 @@ export async function loadAssets(raylibFS, root, fetchFile = fetch) {
       const asset = await fetchFile(path);
       if (!asset.ok) throw new Error(`Asset ${path}: HTTP ${asset.status}`);
       const data = new Uint8Array(await asset.arrayBuffer());
-      raylibFS.mkdirTree(`/${path.slice(0, path.lastIndexOf("/"))}`);
-      raylibFS.writeFile(`/${path}`, data);
+      const fs = await raylibFS;
+      fs.mkdirTree(`/${path.slice(0, path.lastIndexOf("/"))}`);
+      fs.writeFile(`/${path}`, data);
       putFile(root, path, data, true);
       bytes += data.byteLength;
     }
@@ -235,8 +237,8 @@ export function attachPersistence(wasiHost, memory, root, {
   return diagnostics;
 }
 
-export function gameEnvironment(query) {
-  const result = new Map([["GARDEN_WIDTH", "1280"], ["GARDEN_HEIGHT", "720"]]);
+export function gameEnvironment(query, size = { width: 1280, height: 720 }) {
+  const result = new Map([["GARDEN_WIDTH", String(size.width)], ["GARDEN_HEIGHT", String(size.height)], ["GARDEN_PAUSED", "1"]]);
   for (const [key, env, min, max] of [["width", "GARDEN_WIDTH", 960, 4096],
     ["height", "GARDEN_HEIGHT", 600, 2160], ["frames", "GARDEN_FRAMES", 1, 60000]]) {
     const value = query.get(key);

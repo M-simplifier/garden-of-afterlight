@@ -28,6 +28,7 @@ done
 for tool in python3 curl tar patch sha256sum wasm32-wasi-ghc wasm32-wasi-ghc-pkg wasm32-wasi-clang; do
   command -v "$tool" >/dev/null || { printf 'Missing %s; use the pinned web/ Nix shell.\n' "$tool" >&2; exit 1; }
 done
+python3 -c 'import sys; sys.version_info >= (3, 10) or sys.exit("Python 3.10+ is required for fontTools.")'
 cabal=${CABAL:-cabal}
 ghc_version=$(wasm32-wasi-ghc --numeric-version)
 cabal_version=$("$cabal" --numeric-version)
@@ -73,6 +74,11 @@ for tool in node npm emcc; do command -v "$tool" >/dev/null; done
 emcc_version=$(emcc --version | head -n 1)
 [[ "$emcc_version" == *' 3.1.45 '* ]] || { printf 'Expected Emscripten 3.1.45.\n' >&2; exit 1; }
 
+# The pure-Python wheel needs no install, pip, native extensions or extra deps.
+fonttools="$cache/fonttools-4.61.1-py3-none-any.whl"
+download https://files.pythonhosted.org/packages/c7/4e/ce75a57ff3aebf6fc1f4e9d508b8e5810618a33d900ad6c19eb30b290b97/fonttools-4.61.1-py3-none-any.whl \
+  "$fonttools" 17d2bf5d541add43822bcf0c43d7d847b160c9bb01d15d5007d84e2217aaa371
+
 hackage_sha=09aec4df1f8974a90366bd78612839549e387643b20826a519bb4f1e831591aa
 archive="$cache/h-raylib-5.6.0.0.tar.gz"
 download https://hackage.haskell.org/package/h-raylib-5.6.0.0/h-raylib-5.6.0.0.tar.gz "$archive" "$hackage_sha"
@@ -107,6 +113,7 @@ PY
 # A program name on PATH also handles repository paths containing spaces.
 export PATH="$web:$PATH"
 "$cabal" build exe:afterlight-browser --project-file="$build/cabal.project" \
+  --with-compiler="$(command -v wasm32-wasi-ghc)" --with-hc-pkg="$(command -v wasm32-wasi-ghc-pkg)" \
   --builddir="$build/dist" -j"$jobs" --ghc-options=-pgmlwasm-link
 artifact=$(python3 - "$build/dist/cache/plan.json" <<'PY'
 import json, sys
@@ -168,11 +175,11 @@ NODE_PATH="$npm_cache/node_modules" "$npm_cache/node_modules/.bin/esbuild" \
   "$web/host/src/host.js" --bundle --format=esm --platform=browser \
   --external:./raylib.mjs --outfile="$output/host.js"
 cp -- "$web/host/public/index.html" "$output/index.html"
-python3 "$web/prepare-assets.py" "$assets" "$output"
 python3 - "$output/build-info.json" "$ghc_version" "$cabal_version" "$emcc_version" "$hackage_sha" "$patch_sha" <<'PY'
 import json, pathlib, sys
 path, ghc, cabal, emcc, archive, patch = sys.argv[1:]
 pathlib.Path(path).write_text(json.dumps(dict(ghc=ghc, cabal=cabal, emscripten=emcc,
-    h_raylib_archive_sha256=archive, h_raylib_patch_sha256=patch), indent=2) + '\n')
+    h_raylib_archive_sha256=archive, h_raylib_patch_sha256=patch, fonttools='4.61.1'), indent=2) + '\n')
 PY
-printf '\nBrowser files: %s\nServe locally: python3 -m http.server 8000 --bind 127.0.0.1 --directory "%s"\n' "$output" "$output"
+python3 "$web/prepare-assets.py" "$assets" "$output" --fonttools-wheel "$fonttools"
+printf '\nBrowser files: %s\nServe locally: python3 "%s/serve.py" --directory "%s"\n' "$output" "$web" "$output"

@@ -121,8 +121,8 @@ test("corrupt browser storage is retained, not silently overwritten", () => {
 
 test("browser diagnostics set only the explicit game environment allowlist", () => {
   const env = gameEnvironment(new URLSearchParams("width=1920&height=1080&frames=300&tour=islands&scene=night&paused=1&hud=0&GARDEN_SAVE_PATH=elsewhere&path=/tmp"));
-  assert.deepEqual(env, ["GARDEN_WIDTH=1920", "GARDEN_HEIGHT=1080", "GARDEN_FRAMES=300",
-    "GARDEN_TOUR=islands", "GARDEN_SCENE=night", "GARDEN_PAUSED=1", "GARDEN_HUD=0"]);
+  assert.deepEqual(env.sort(), ["GARDEN_WIDTH=1920", "GARDEN_HEIGHT=1080", "GARDEN_FRAMES=300",
+    "GARDEN_TOUR=islands", "GARDEN_SCENE=night", "GARDEN_PAUSED=1", "GARDEN_HUD=0"].sort());
   assert.deepEqual(gameEnvironment(new URLSearchParams("width=1&height=no&frames=-3&tour=unknown")),
-    ["GARDEN_WIDTH=1280", "GARDEN_HEIGHT=720"]);
+    ["GARDEN_WIDTH=1280", "GARDEN_HEIGHT=720", "GARDEN_PAUSED=1"]);
 });

@@ -1,4 +1,5 @@
 {-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE CPP #-}
 
 module Garden.Render (renderScene, renderSceneWith, renderPhotoChrome, renderPhotoFrame, renderPhotoToast, renderInterface, renderMenu, renderSaveFeedback) where
 
@@ -252,7 +253,11 @@ renderMenu resources saved invertY = withUIScale $ \w h _ -> do
   let x = fromIntegral w / 2 - 440; y = fromIntegral h / 2 - 205
   drawRectangle 0 0 w h (Color 3 14 23 211)
   textAt resources "余光の庭" x y 38 (Color 239 235 207 255)
+#if defined(wasm32_HOST_ARCH)
+  textAt resources "クリック  旅を続ける" x (y + 75) 23 (Color 207 229 216 255)
+#else
   textAt resources "ESC  旅を続ける" x (y + 75) 23 (Color 207 229 216 255)
+#endif
   textAt resources "F5   記録する" x (y + 118) 23 (Color 207 229 216 255)
   textAt resources "ENTER  記録して終了" x (y + 161) 23 (Color 207 229 216 255)
   textAt resources ("I  視点の上下反転：" <> if invertY then "ON" else "OFF") x (y + 212) 18 (Color 175 200 192 255)
