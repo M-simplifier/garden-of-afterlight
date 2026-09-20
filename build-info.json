@@ -1,0 +1,8 @@
+{
+  "ghc": "9.14.1.20260330",
+  "cabal": "3.16.1.0",
+  "emscripten": "emcc (Emscripten gcc/clang-like replacement + linker emulating GNU ld) 3.1.45 (ef3e4e3b044de98e1811546e0bc605c65d3412f4)",
+  "h_raylib_archive_sha256": "09aec4df1f8974a90366bd78612839549e387643b20826a519bb4f1e831591aa",
+  "h_raylib_patch_sha256": "0fffba29d9f66c5f41250e73e98239b948f6845bf4c9076845e27edaab5a0e3e",
+  "fonttools": "4.61.1"
+}

@@ -1,0 +1,86 @@
+[
+  {
+    "path": "assets/shaders/voxel.vs",
+    "bytes": 476
+  },
+  {
+    "path": "assets/shaders/voxel.fs",
+    "bytes": 1449
+  },
+  {
+    "path": "assets/shaders/sky.fs",
+    "bytes": 1935
+  },
+  {
+    "path": "assets/shaders/post.fs",
+    "bytes": 2228
+  },
+  {
+    "path": "assets/fonts/glyphs.txt",
+    "bytes": 931
+  },
+  {
+    "path": "assets/fonts/NotoSansCJKjp-Regular.otf",
+    "bytes": 202212
+  },
+  {
+    "path": "assets/fonts/LICENSE-NotoSansCJK.txt",
+    "bytes": 4301
+  },
+  {
+    "path": "assets/garden-audio/day.wav",
+    "bytes": 8467244
+  },
+  {
+    "path": "assets/garden-audio/night.wav",
+    "bytes": 8467244
+  },
+  {
+    "path": "assets/garden-audio/Mine.wav",
+    "bytes": 49436
+  },
+  {
+    "path": "assets/garden-audio/Build.wav",
+    "bytes": 67076
+  },
+  {
+    "path": "assets/garden-audio/Jewel.wav",
+    "bytes": 247000
+  },
+  {
+    "path": "assets/garden-audio/Offering.wav",
+    "bytes": 423404
+  },
+  {
+    "path": "assets/garden-audio/Wound.wav",
+    "bytes": 79424
+  },
+  {
+    "path": "assets/garden-audio/Jump.wav",
+    "bytes": 67076
+  },
+  {
+    "path": "assets/garden-audio/Strike.wav",
+    "bytes": 74132
+  },
+  {
+    "path": "assets/garden-audio/Dusk.wav",
+    "bytes": 564524
+  },
+  {
+    "path": "assets/garden-audio/Wings.wav",
+    "bytes": 617444
+  },
+  {
+    "path": "assets/garden-audio/Return.wav",
+    "bytes": 740924
+  },
+  {
+    "path": "assets/garden-audio/Dash.wav",
+    "bytes": 67076
+  },
+  {
+    "path": "assets/shaders/screen.vs",
+    "bytes": 300
+  }
+]
