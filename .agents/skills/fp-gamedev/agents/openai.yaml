@@ -1,0 +1,4 @@
+interface:
+  display_name: "FP Gamedev"
+  short_description: "純粋関数型ゲームの実装知識を、必要な場面で引き出す道具"
+  default_prompt: "$fp-gamedev を使い、このゲームの仕様をHaskellで実装してください。"

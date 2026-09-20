@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="ja">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#102c30">
+<title>余光の庭 · Garden of Afterlight</title>
+<style>
+  :root { color-scheme: dark; font-family: system-ui, sans-serif; color: #f3efe2; background: #102c30; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; }
+  button, a { -webkit-tap-highlight-color: transparent; }
+  button, select { font: inherit; color: inherit; cursor: pointer; }
+  button:focus-visible, select:focus-visible, a:focus-visible { outline: 2px solid #e5d79c; outline-offset: 6px; }
+  [hidden] { display: none !important; }
+  #game { position: fixed; inset: 0; width: 100%; height: 100dvh; overflow: hidden; isolation: isolate; }
+  #canvas { display: block; width: 100%; height: 100%; outline: none; background: #102c30; }
+  .loading { position: absolute; inset: 0; display: grid; place-items: center; padding: 2rem;
+    background: radial-gradient(ellipse at 65% 18%, #678d7838, transparent 55%),
+      radial-gradient(ellipse at 16% 78%, #42868222, transparent 50%), linear-gradient(155deg, #143d3d, #071c25); }
+  .loading:before, .loading:after { content: ''; position: absolute; width: 45vmin; height: 45vmin;
+    border: 1px solid #c9dabb12; transform: rotate(45deg); pointer-events: none; }
+  .loading:after { width: 65vmin; height: 65vmin; }
+  .load-card { position: relative; text-align: center; width: min(25rem, 100%); }
+  .eyebrow { font-size: .64rem; letter-spacing: .35em; color: #bed1c6; margin: 0 0 1rem; }
+  h1 { font-family: 'Yu Mincho', 'Hiragino Mincho ProN', serif; font-size: clamp(2.5rem, 5vw, 4rem);
+    font-weight: 400; letter-spacing: .2em; margin: 0 0 1.2rem .2em; }
+  .invitation { font-size: .84rem; color: #c3d0c4; letter-spacing: .1em; margin-bottom: 3.8rem; }
+  .seed { width: .65rem; height: .65rem; margin: 0 auto 2rem; transform: rotate(45deg);
+    background: #ddcf91; box-shadow: 0 0 36px #d9dd9599; animation: breathe 2.8s ease-in-out infinite; }
+  @keyframes breathe { 50% { opacity: .45; transform: rotate(45deg) scale(.7); } }
+  #status { font-size: .88rem; letter-spacing: .08em; margin: 0 0 1rem; }
+  #detail { font-size: .7rem; color: #b5c8bf; font-variant-numeric: tabular-nums; min-height: 1.4em; margin: .8rem 0 0; }
+  progress { display: block; width: 100%; height: 2px; border: 0; background: #cadbc124; accent-color: #d7ce98; }
+  progress::-webkit-progress-bar { background: #cadbc124; }
+  progress::-webkit-progress-value { background: #d7ce98; transition: width .15s linear; }
+  progress::-moz-progress-bar { background: #d7ce98; }
+  .caption { position: absolute; bottom: max(1.6rem, env(safe-area-inset-bottom)); left: 1rem; right: 1rem;
+    text-align: center; color: #adbfba; font-size: .66rem; letter-spacing: .12em; }
+  #entry { position: absolute; inset: 0; display: grid; align-content: end; justify-items: center;
+    padding: 3rem 1.2rem max(7vh, 2rem); background: linear-gradient(transparent 60%, #051c25ba); pointer-events: none; }
+  #enter { pointer-events: auto; background: #0c262ccc; border: 1px solid #d5ddbb66; border-radius: 2px;
+    padding: .85rem 2rem; letter-spacing: .15em; box-shadow: 0 4px 28px #0002; }
+  #enter:hover { background: #29463ee6; border-color: #ede0ac; }
+  #capture-message { max-width: 40rem; text-align: center; font-size: .72rem; color: #e0e7d9;
+    text-shadow: 0 1px 5px #001820; line-height: 1.8; margin: .9rem 0 0; }
+  #controls { position: absolute; right: max(1.25rem, env(safe-area-inset-right)); top: max(1.25rem, env(safe-area-inset-top));
+    display: flex; align-items: center; gap: .6rem; }
+  #controls button, #controls a, #controls select, #retry { background: #102c30dd; border: 1px solid #b6ccbd66; border-radius: 2px;
+    padding: .65rem .9rem; font-size: .75rem; color: #f3efe2; text-decoration: none; }
+  .quality { display: flex; align-items: center; gap: .5rem; font-size: .75rem; text-shadow: 0 1px 5px #001820; }
+  #retry { margin-top: 1.7rem; }
+  #error-details { margin-top: 1.5rem; font-size: .72rem; text-align: left; color: #d1bda6; }
+  #error-text { max-height: 25vh; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+  #game:not([data-mode='loading']):not([data-mode='failed']):not([data-mode='stopped']) .loading { display: none; }
+  #game:not([data-mode='ready']):not([data-mode='paused']) #entry { display: none; }
+  #game:not([data-mode='ready']):not([data-mode='paused']) #controls { display: none; }
+  @media (prefers-reduced-motion: reduce) { .seed { animation: none; } progress::-webkit-progress-value { transition: none; } }
+</style>
+<main id="game" data-mode="loading">
+  <canvas id="canvas" width="1280" height="720" tabindex="0" aria-label="余光の庭 ゲーム画面"></canvas>
+  <section class="loading" aria-label="起動状況">
+    <div class="load-card">
+      <p class="eyebrow">GARDEN OF AFTERLIGHT</p><h1>余光の庭</h1>
+      <p class="invitation">ひとつの光から、庭はよみがえる。</p>
+      <div class="seed" aria-hidden="true"></div>
+      <p id="status" role="status" aria-live="polite">庭をひらいています</p>
+      <progress id="progress" aria-label="現在の準備の進み具合"></progress>
+      <p id="detail">もうすぐ、最初の景色へ</p>
+      <button id="retry" hidden>もう一度ひらく</button>
+      <details id="error-details" hidden><summary>詳細を確認</summary><pre id="error-text"></pre></details>
+    </div>
+    <p class="caption">キーボードとマウスで遊ぶ、小さなボクセルの世界</p>
+  </section>
+  <div id="entry">
+    <button id="enter">クリックして庭へ</button>
+    <p id="capture-message">WASDで歩く · マウスで見回す · Escでメニュー</p>
+  </div>
+  <nav id="controls" aria-label="画面と写真">
+    <label class="quality">画質 <select id="quality" aria-label="画質"><option value="1">高</option><option value="0.75">標準</option><option value="0.5">軽量</option></select></label>
+    <a id="photo-download" hidden>写真を保存</a>
+    <button id="fullscreen" title="全画面に切り替え（F11）" aria-label="全画面に切り替え">⛶ 全画面</button>
+  </nav>
+  <noscript>この庭を開くにはJavaScriptを有効にしてください。</noscript>
+</main>
+<script>
+  // Keep failures before the host bundle loads visible, without erasing saves.
+  window.addEventListener('error', event => {
+    if (event.target?.tagName !== 'SCRIPT') return;
+    document.querySelector('#game').dataset.mode = 'failed';
+    document.querySelector('#status').textContent = '庭を読み込めませんでした';
+    document.querySelector('#detail').textContent = '接続を確かめて、ページを読み直してください。';
+    document.querySelector('#progress').hidden = true;
+    const retry = document.querySelector('#retry');
+    retry.hidden = false;
+    retry.onclick = () => location.reload();
+  }, true);
+</script>
+<script type="module" src="./host.js"></script>
+</html>

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Haskell Excellence"
+  short_description: "型・不変条件・純粋関数・効果境界と実行検証でHaskellの品質を高める"
+  default_prompt: "$haskell-excellence を使い、このHaskellの実装またはレビューを、既存の設計と検査に合わせて進めてください。"

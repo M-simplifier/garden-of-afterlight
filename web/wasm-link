@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# GHC's --stack-first defeats the separate arena selected by --global-base.
+# Preserve every other linker argument, including paths containing spaces.
+args=()
+while (($#)); do
+  case "$1" in
+    --stack-first) shift ;;
+    -Xlinker)
+      if [[ "${2:-}" == --stack-first ]]; then shift 2
+      else args+=("$1"); shift; fi ;;
+    -Wl,*)
+      IFS=, read -r -a options <<< "${1#-Wl,}"
+      kept=()
+      for option in "${options[@]}"; do
+        [[ "$option" == --stack-first ]] || kept+=("$option")
+      done
+      if ((${#kept[@]})); then
+        joined=$(IFS=,; printf '%s' "${kept[*]}")
+        args+=("-Wl,$joined")
+      fi
+      shift ;;
+    *) args+=("$1"); shift ;;
+  esac
+done
+exec wasm32-wasi-clang "${args[@]}"

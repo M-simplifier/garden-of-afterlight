@@ -229,9 +229,8 @@ ornamentGeometry :: M.Map Cell Material -> [(Cell, Material)] -> Geometry
 ornamentGeometry cells = concatMap ornament
   where
     ornament (c@(Cell x y z), m)
-      | M.member (Cell x (y + 1) z) cells = []
       | m == Moss && h `mod` 4 == 0 =
-          concat
+          onSurface $ concat
             [ let a = fromIntegral branch * 2.094 + fromIntegral (h `mod` 7)
                   r = fromIntegral step * 0.075
                   pos = V3 (0.5 + cos a * r) (1 + fromIntegral step * 0.065) (0.5 + sin a * r)
@@ -245,14 +244,16 @@ ornamentGeometry cells = concatMap ornament
               step <- [1 .. 5 :: Int]
             ]
       | m == Water && h `mod` 7 == 0 =
-          cube (V3 0.16 1.012 0.18) (V3 0.6 0.035 0.6) (RGB 0.23 0.50 0.37) 0
+          onSurface $ cube (V3 0.16 1.012 0.18) (V3 0.6 0.035 0.6) (RGB 0.23 0.50 0.37) 0
             <> cube (V3 0.39 1.04 0.40) (V3 0.16 0.15 0.16) (palette (Ore Rose)) 0.38
       | m == Pearl && y > 7 && h `mod` 4 == 0 =
-          cube (V3 0.17 1.005 0.17) (V3 0.66 0.07 0.66) (palette Gold) 0
+          onSurface $ cube (V3 0.17 1.005 0.17) (V3 0.66 0.07 0.66) (palette Gold) 0
       | otherwise = []
       where
         h = abs (x * 71 + z * 137 + y * 19)
         base = V3 (fromIntegral x) (fromIntegral y) (fromIntegral z)
+        -- Probe neighbours only after a cell qualifies for an ornament.
+        onSurface geometry = if M.member (Cell x (y + 1) z) cells then [] else geometry
         shade = sunVisibility cells c
         cube offset (V3 sx sy sz) color glow =
           concat
