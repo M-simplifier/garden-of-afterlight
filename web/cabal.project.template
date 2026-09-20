@@ -1,0 +1,28 @@
+-- Expanded into the external cache by build.sh; no personal paths are stored.
+packages: @REPO@ @H_RAYLIB@
+store-dir: @STORE@
+with-compiler: wasm32-wasi-ghc
+with-hc-pkg: wasm32-wasi-ghc-pkg
+shared: True
+optimization: 2
+index-state: 2026-08-17T00:00:00Z
+
+-- Use the cross compiler's own boot libraries, including for Template Haskell.
+constraints:
+  time installed,
+  unix installed,
+  directory installed,
+  filepath installed,
+  bytestring installed,
+  containers installed,
+  template-haskell installed,
+  Yampa ==0.15,
+  simple-affine-space ==0.2.1,
+  random ==1.2.1.3,
+  splitmix ==0.1.3.2
+allow-newer: h-raylib:template-haskell
+
+package h-raylib
+  flags: -detect-platform +platform-web +disable-lens
+package garden-of-afterlight
+  flags: +web -native

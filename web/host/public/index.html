@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Garden of Afterlight</title>
+<style>
+  html { color-scheme: dark; font: 16px system-ui; background: #11171a; color: #edf1e8; }
+  body { margin: 0; display: grid; justify-items: center; gap: .7rem; padding: 1rem; }
+  canvas { width: min(1280px, 100%); height: auto; max-height: calc(100dvh - 8rem); object-fit: contain; background: #182024; outline: none; }
+  canvas:fullscreen { width: 100vw; height: 100vh; max-height: none; }
+  button { padding: .7rem 2rem; cursor: pointer; }
+  #status { max-width: 75rem; white-space: pre-wrap; overflow-wrap: anywhere; }
+  [data-error] { color: #ffb5a9; }
+</style>
+<canvas id="canvas" width="1280" height="720" tabindex="0" aria-label="Game canvas"></canvas>
+<button id="start" disabled>Start</button>
+<div id="pointer-hint" hidden>Click the game to capture the mouse.</div>
+<a id="photo-download" hidden>Download latest photo</a>
+<div id="status" role="status">Loading…</div>
+<script type="module" src="./host.js"></script>
+</html>

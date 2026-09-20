@@ -17,7 +17,7 @@ import Raylib.Core.Shapes
 import Raylib.Core.Text (drawText)
 import Raylib.Core.Textures (drawTexturePro)
 import Raylib.Types
-import Raylib.Util (blendMode, mode2D, mode3D, shaderMode, textureMode)
+import Raylib.Util (blendMode, mode2D, mode3D, textureMode)
 import Text.Printf (printf)
 
 cameraFor :: SceneView -> Camera3D
@@ -56,7 +56,7 @@ renderSceneWith portrait resources view pulse = do
   uniform resources ss "veil" (ShaderUniformFloat (sceneVeil view))
   textureMode target $ do
     clearBackground (Color 110 160 166 255)
-    shaderMode ss (drawRectangle 0 0 width height white)
+    withShader ss (drawRectangle 0 0 width height white)
     mode3D camera $ do
       (_, chunks) <- readIORef (resourceChunks resources)
       let visible (cx, cy, cz) =
@@ -83,7 +83,7 @@ renderSceneWith portrait resources view pulse = do
         Just p -> Vector3 (photoExposure p) (fromIntegral (fromEnum (photoGrade p))) (if photoBloom p then 1 else 0)
   uniform resources ps "grading" (ShaderUniformVec3 grading)
   uniform resources ps "vignette" (ShaderUniformFloat (if maybe True photoVignette portrait then 0.12 else 0))
-  shaderMode ps $
+  withShader ps $
     drawTexturePro
       (renderTexture'texture target)
       (Rectangle 0 0 (fromIntegral width) (negate (fromIntegral height)))

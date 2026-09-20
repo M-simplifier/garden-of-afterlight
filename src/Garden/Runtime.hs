@@ -1,8 +1,17 @@
 {-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE CPP #-}
 
-module Garden.Runtime (runGarden) where
+module Garden.Runtime
+  ( GardenApp,
+    startupGarden,
+    stepGarden,
+    shouldCloseGarden,
+    shutdownGarden,
+    runGarden,
+  )
+where
 
-import Control.Exception (IOException, evaluate, finally, try)
+import Control.Exception (IOException, bracket, bracketOnError, evaluate, finally, mask_, onException, try)
 import Control.Monad (foldM, replicateM_, unless, void, when)
 import Data.IORef
 import Data.List (sort)
@@ -23,9 +32,10 @@ import Garden.Types
 import Garden.View
 import Garden.World
 import Raylib.Core
+import Raylib.Core.Audio (closeAudioDevice)
 import Raylib.Core.Text (drawText)
 import Raylib.Types
-import Raylib.Util (drawing, withWindow)
+import Raylib.Util (drawing)
 import System.Directory
 import System.Environment (lookupEnv)
 import System.FilePath (takeDirectory)
@@ -42,8 +52,26 @@ data LightSignal = LightSignal !(ReactHandle [Cue] Float) !(IORef Float)
 -- Host resources and run options have one lifetime, separate from simulation.
 data Session = Session Resources AudioAssets LightSignal (IORef [Timing]) (Maybe Int) (Maybe Int) FilePath (Maybe String) (IORef Tour.Pilot)
 
+data FrameState = FrameState !World !Clock !Host !Int !Double
+
+data AppState = Running !FrameState | Finished | Released
+
+-- A single render thread owns this handle. Each callback returns after one
+-- frame; the simulation clock and FRP continuation survive between callbacks.
+data GardenApp = GardenApp !Session !(IORef AppState)
+
 runGarden :: IO ()
-runGarden = do
+runGarden = bracket startupGarden shutdownGarden loop
+  where
+    loop app = do
+      stepGarden app
+      close <- shouldCloseGarden app
+      unless close (loop app)
+
+-- | Acquire the window and session. Call 'shutdownGarden' on the same render
+-- thread after cancelling callbacks, including when a callback throws.
+startupGarden :: IO GardenApp
+startupGarden = do
   createDirectoryIfMissing True ".runtime/garden/screenshots"
   ensureAudio
   source <- loadSaved
@@ -57,37 +85,91 @@ runGarden = do
   pausedAtStart <- (== Just "1") <$> lookupEnv "GARDEN_PAUSED"
   hiddenAtStart <- (== Just "0") <$> lookupEnv "GARDEN_HUD"
   let world = chooseScene scene source
+#if defined(wasm32_HOST_ARCH)
+  -- CSS fits this drawing buffer to the page; GLFW's window-resize callback
+  -- otherwise replaces the requested resolution with the whole browser size.
+  setConfigFlags [Msaa4xHint]
+#else
   setConfigFlags [Msaa4xHint, WindowResizable]
-  withWindow width height "NOEMA - Garden of Afterlight" 120 $ \window -> do
+#endif
+  bracketOnError (initWindow width height "NOEMA - Garden of Afterlight") (closeWindow . Just) $ \window -> do
+#if defined(wasm32_HOST_ARCH)
+    -- requestAnimationFrame owns pacing; a browser callback must return.
+    setTargetFPS 0
+#else
+    setTargetFPS 120
+#endif
     setExitKey KeyNull
     setWindowMinSize 960 600
     drawing $ clearBackground (Color 14 36 43 255) >> drawText "NOEMA / GARDEN OF AFTERLIGHT" 55 60 28 (Color 232 230 204 255) >> drawText "Growing the voxel garden..." 57 113 20 (Color 171 210 192 255)
-    withResources window $ \resources -> do
-      audio <- loadAudioAssets window
-      syncChunks resources (project world)
-      -- First-use shader/driver work belongs to loading, before input time starts.
-      replicateM_ 6 $ do
-        updateAudio audio (worldVeil world) False
-        drawing $ renderScene resources (project world) 0 >> renderInterface resources (project world) False 120
-      performMajorGC
-      if pausedAtStart then enableCursor else disableCursor
-      _ <- getMouseDelta
-      start <- getTime
-      timings <- newIORef []
-      glow <- newIORef 0
-      handle <- reactInit (pure []) (\_ _ value -> writeIORef glow value >> pure False) lightEnvelope
-      let initialHost = Host pausedAtStart hiddenAtStart False False Nothing 0 (eye (worldPlayer world)) Nothing Nothing 0
-      pilot <- newIORef (Tour.Pilot 0 0)
-      let session = Session resources audio (LightSignal handle glow) timings frameLimit shotFrame shotName tour pilot
-      loop session world emptyClock initialHost 0 start
-        `finally` (enableCursor >> shutdownAudio window audio)
-      rows <- reverse <$> readIORef timings
-      unless (null rows) (writeTiming rows)
+    bracketOnError (acquireResources window) releaseResources $ \resources ->
+      bracketOnError
+        (loadAudioAssets window `onException` closeAudioDevice (Just window))
+        (shutdownAudio window) $ \audio -> do
+          syncChunks resources (project world)
+          -- First-use shader/driver work belongs to loading, before input time starts.
+          replicateM_ 6 $ do
+            updateAudio audio (worldVeil world) False
+            drawing $ renderScene resources (project world) 0 >> renderInterface resources (project world) False 120
+          performMajorGC
+          if pausedAtStart then enableCursor else disableCursor
+          _ <- getMouseDelta
+          start <- getTime
+          timings <- newIORef []
+          glow <- newIORef 0
+          handle <- reactInit (pure []) (\_ _ value -> writeIORef glow value >> pure False) lightEnvelope
+          let initialHost = Host pausedAtStart hiddenAtStart False False Nothing 0 (eye (worldPlayer world)) Nothing Nothing 0
+          pilot <- newIORef (Tour.Pilot 0 0)
+          let session = Session resources audio (LightSignal handle glow) timings frameLimit shotFrame shotName tour pilot
+          state <- newIORef (Running (FrameState world emptyClock initialHost 0 start))
+          pure (GardenApp session state)
 
-loop :: Session -> World -> Clock -> Host -> Int -> Double -> IO ()
-loop session@(Session resources audio (LightSignal handle glow) timingRef limit shotFrame shotName tour pilotRef) w clock host frame previousTime = do
+-- | Run at most one frame. A completed or released application is a no-op.
+stepGarden :: GardenApp -> IO ()
+stepGarden (GardenApp session stateRef) = do
+  state <- readIORef stateRef
+  case state of
+    Running frame -> do
+      next <- stepFrame session frame
+      writeIORef stateRef (maybe Finished Running next)
+    Finished -> pure ()
+    Released -> pure ()
+
+-- | True after a frame has handled a close request, tour completion, frame
+-- limit, or successful save-and-exit. This query does not poll input twice.
+shouldCloseGarden :: GardenApp -> IO Bool
+shouldCloseGarden (GardenApp _ stateRef) = do
+  state <- readIORef stateRef
+  pure $ case state of
+    Running _ -> False
+    Finished -> True
+    Released -> True
+
+-- | Release a session once. Hosts must stop scheduling frames before calling.
+shutdownGarden :: GardenApp -> IO ()
+shutdownGarden (GardenApp (Session resources audio _ timingRef _ _ _ _ _) stateRef) = mask_ $ do
+  state <- atomicModifyIORef' stateRef (\old -> (Released, old))
+  case state of
+    Released -> pure ()
+    _ ->
+      let window = resourceWindow resources
+          timings = do
+            rows <- reverse <$> readIORef timingRef
+            unless (null rows) (writeTiming rows)
+       in enableCursor
+            `finally` shutdownAudio window audio
+            `finally` timings
+            `finally` releaseResources resources
+            `finally` closeWindow (Just window)
+
+stepFrame :: Session -> FrameState -> IO (Maybe FrameState)
+stepFrame (Session resources audio (LightSignal handle glow) timingRef limit shotFrame shotName tour pilotRef) (FrameState w clock host frame previousTime) = do
   now <- getTime
+#if defined(wasm32_HOST_ARCH)
+  let close = False
+#else
   close <- windowShouldClose
+#endif
   pilotBefore <- readIORef pilotRef
   let completed = if tour == Just "islands" then Tour.expeditionDone pilotBefore else isJust tour && worldRestored w && null (worldBursts w)
   if close || completed || maybe False (frame >=) limit
@@ -99,6 +181,7 @@ loop session@(Session resources audio (LightSignal handle glow) timingRef limit 
           ( unlines
               ["pilot=" <> show pilotBefore, "feet=" <> show (playerFeet (worldPlayer w)), "stage=" <> Tour.tourStage w, "semantic_ticks=" <> show (worldTick w), "revision=" <> show (worldRevision w), "life=" <> show (worldLife w), "kin=" <> show (worldKin w)]
           )
+      pure Nothing
     else do
       pressed <- readPresses
       let esc = KeyEscape `elem` pressed
@@ -193,26 +276,13 @@ loop session@(Session resources audio (LightSignal handle glow) timingRef limit 
         takeScreenshot (".runtime/garden/screenshots/tour-" <> milestone nextWorld <> ".png")
         putStrLn ("Tour " <> show (worldTick nextWorld) <> " " <> milestone nextWorld)
       when ((isJust limit || isJust tour) && frame < 60000) $ modifyIORef' timingRef (Timing frame (sceneTime view) ((afterSim - now) * 1000) ((afterMesh - afterSim) * 1000) ((afterAudio - afterMesh) * 1000) ((afterWorld - afterAudio) * 1000) ((afterUI - afterWorld) * 1000) ((afterPresent - afterUI) * 1000) ((afterPresent - now) * 1000) :)
-      let continue =
-            loop
-              session
-              nextWorld
-              nextClock
-              (updatedHost {hostSaved = status, hostRecordUntil = recordUntil, hostPreviousEye = priorEye, hostPhotoMessage = photoMessage, hostPhotoUntil = if capture then now + 4 else hostPhotoUntil updatedHost})
-              (frame + 1)
-              now
+      let continuedHost = updatedHost {hostSaved = status, hostRecordUntil = recordUntil, hostPreviousEye = priorEye, hostPhotoMessage = photoMessage, hostPhotoUntil = if capture then now + 4 else hostPhotoUntil updatedHost}
+          continue nextHost = Just (FrameState nextWorld nextClock nextHost (frame + 1) now)
       if paused && enter && not wasPhoto && not photoEnter
         then do
           success <- saveCurrent nextWorld
-          unless success $
-            loop
-              session
-              nextWorld
-              nextClock
-              (updatedHost {hostSaved = Just False, hostRecordUntil = now + 3, hostPreviousEye = priorEye})
-              (frame + 1)
-              now
-        else continue
+          pure (if success then Nothing else continue (updatedHost {hostSaved = Just False, hostRecordUntil = now + 3, hostPreviousEye = priorEye}))
+        else pure (continue continuedHost)
   where
     tick (world, cues, _) input = do
       pilot <- readIORef pilotRef
