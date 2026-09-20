@@ -20,6 +20,7 @@ draw前後の実時計はGPU時間ではない。区別が必要なら対象OS�
 | 大量のboxed値・GC | strictness、適切な配列、局所`ST` | 外へ可変状態を漏らさないAPI |
 | 全世界・全pairの走査 | sparse chunk、空間索引、active work | 候補を取り落とさないこと |
 | 同じ形状の再生成・転送 | mesh共有、instance化、native view | material・lighting・寿命の一致 |
+| 大量データのFFI往復 | wrapperのmarshal/readbackを調べ、必要な表現だけ構築 | native初期値・allocator・所有権の一致 |
 | 一frameにcatch-upが集中 | 確定済みtick入力のqueue | 順序・edge・移動量・時間の保持 |
 
 queueには容量と追いつけない場合の方針を持たせる。高い描画頻度を前提に一tickずつ

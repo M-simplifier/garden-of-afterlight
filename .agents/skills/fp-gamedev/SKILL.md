@@ -41,7 +41,7 @@ advance :: TickInput -> GameState -> (GameState, [Effect])
 | 今回扱うもの | 参照 |
 | --- | --- |
 | ツールチェーン、依存、OS、起動・配布 | [stack](references/stack.md) |
-| ブラウザ出力、Wasm、WebGL、ブラウザ保存 | [browser](references/browser.md) |
+| ブラウザ出力、起動・入力・配信、Wasm・WebGL | [browser](references/browser.md) |
 | 入力、固定刻み、FRP、保存・再構築 | [time-and-state](references/time-and-state.md) |
 | カメラ、衝突、モデル、ボクセル、音・フォント | [space-and-resources](references/space-and-resources.md) |
 | 動く足場、複数主体、連成系、リプレイ、物理 | [simulation](references/simulation.md) |
