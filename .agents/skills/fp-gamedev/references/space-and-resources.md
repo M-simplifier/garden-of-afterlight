@@ -60,6 +60,9 @@ Afterlightのh-raylib経路には次の具体例がある。bindingの内部へ�
 - `loadModelFromMesh`由来の共有default materialを自分の所有物として解放しない。
 - `Model`や`Font`の大きい配列をdrawごとにmarshalするコストには、測定に基づいて
   寿命を限定したnative viewを使う。借用GPU IDの所有権を複製しない。
+- `BeginShaderMode`は`Shader.locs`を後のbatch描画まで借用する。
+  FFI呼出が戻った時点で解放せず、描画と`EndShaderMode`のflushまで保持する。
+  `Resources.withShader`は、ブラウザ移植で顕在化したこの寿命違反への修正例。
 - native側へ移した頂点配列をHaskell側でも不要に保持すると、編集時のGC負荷が増える。
   解放に必要なmetadataだけを残す最適化は、そのbindingの解放契約と一緒に扱う。
 

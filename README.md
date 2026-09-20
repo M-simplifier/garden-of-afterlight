@@ -79,10 +79,22 @@ cabal run noema-garden-check
 これはOSのキー入力や人間によるプレイテストとは別の検査です。
 `tools/fixtures/garden-v3.txt` は旧エンコーダーで生成した互換性検査用の二編集の庭で、個人のプレイ記録ではありません。
 
+## ブラウザへ出力する
+
+同じHaskellのゲームルールとraylib描画を、GHC Wasm＋WebGL 2で動かせます。
+Linux / WSLでの[ビルド手順](web/README.md)と、[再利用する際の判断](.agents/skills/fp-gamedev/references/browser.md)を同梱しています。
+ツールチェーン、bindingの32bit補正、アセット準備は`web/build.sh`へまとめました。
+出力は静的ファイル一式で、専用のゲームサーバーは不要です。
+
+ブラウザ用hostはフレーム実行、クリックによるマウス捕捉、ブラウザ内保存、写真の
+ダウンロードを受け持ちます。ゲームのルール・保存形式・固定tickをJavaScriptで書き直しません。
+起動には以下の非同梱アセットが必要です。
+
 ## 公開範囲
 
-Haskellコード、Cabal設定、検査用データ、実装スキルを公開しています。
-画像、フォント、音源、シェーダー、実行ファイル、個人のセーブ、企画書は含みません。
+Haskellコード、Cabal設定、検査用データ、ブラウザ出力のコード・ツール、実装スキルを公開しています。
+作品の画像、フォント、音源、シェーダー、実行ファイル、個人のセーブ、企画書は含みません。
+ブラウザ互換用の小さなscreen vertex shaderはビルドツールに含みます。
 Haskellで記述した地形・モデル・音声の生成処理はコードの一部として含みます。
 
 Windowsホストも `cabal build noema-garden -fnative` でビルド対象にできます。
@@ -91,4 +103,4 @@ Windowsホストも `cabal build noema-garden -fnative` でビルド対象にで
 
 ## License
 
-[MIT](LICENSE)
+[MIT](LICENSE)。外部依存への差分は[元のライセンスと変更内容](web/patches/README.md)を添えています。

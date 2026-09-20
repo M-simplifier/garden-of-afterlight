@@ -1,6 +1,6 @@
 ---
 name: fp-gamedev
-description: Haskellの純粋関数型ゲーム実装。Cabal・raylib・必要に応じたYampaを使い、状態遷移、時間、入力、3D空間、保存、描画、アセット、性能を一貫した契約で扱う。新作の実装、既存ゲームの拡張・修正・技術レビューに使う。
+description: Haskellの純粋関数型ゲーム実装。Cabal・raylib・必要に応じたYampaを使い、状態遷移、時間、入力、3D、アセット、保存、性能、ネイティブ／ブラウザ出力を扱う。新作の実装、既存ゲームの拡張・修正・技術レビューに使う。
 license: MIT
 ---
 
@@ -41,6 +41,7 @@ advance :: TickInput -> GameState -> (GameState, [Effect])
 | 今回扱うもの | 参照 |
 | --- | --- |
 | ツールチェーン、依存、OS、起動・配布 | [stack](references/stack.md) |
+| ブラウザ出力、Wasm、WebGL、ブラウザ保存 | [browser](references/browser.md) |
 | 入力、固定刻み、FRP、保存・再構築 | [time-and-state](references/time-and-state.md) |
 | カメラ、衝突、モデル、ボクセル、音・フォント | [space-and-resources](references/space-and-resources.md) |
 | 動く足場、複数主体、連成系、リプレイ、物理 | [simulation](references/simulation.md) |
