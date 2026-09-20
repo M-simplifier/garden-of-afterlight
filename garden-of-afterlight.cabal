@@ -62,7 +62,7 @@ executable afterlight-browser
     hs-source-dirs: web, src
     c-sources: web/bridge.c
     ghc-options: -O2 -no-hs-main -optl-mexec-model=reactor
-        "-optl-Wl,--export=hs_init,--export=startup,--export=mainLoop,--export=shouldClose,--export=teardown,--export=loadingStage,--export=loadingDone,--export=loadingTotal,--export=isReady,--export=preview,--export=setActive,--export=free,--export=__heap_base,--export=__global_base,--export=__data_end,--export=__stack_pointer,--import-memory,--global-base=134217728,--initial-memory=167772160,--max-memory=1073741824"
+        "-optl-Wl,--export=hs_init,--export=startup,--export=mainLoop,--export=shouldClose,--export=teardown,--export=loadingStage,--export=loadingDone,--export=loadingTotal,--export=isReady,--export=preview,--export=setActive,--export=setQuality,--export=free,--export=__heap_base,--export=__global_base,--export=__data_end,--export=__stack_pointer,--import-memory,--global-base=134217728,--initial-memory=167772160,--max-memory=1073741824"
     build-depends: Yampa >=0.15 && <0.16, time >=1.12 && <1.16
     other-modules:
         Garden.Types, Garden.World, Garden.Change, Garden.Checkpoint.Legacy, Garden.Render.Invalidation, Garden.Islands, Garden.Rules, Garden.Raycast,

@@ -70,16 +70,39 @@ directory. The browser reactor path comes from Cabal's `plan.json`: using
 cross build. `build-info.json` in the output records the selected tool versions
 and h-raylib archive/patch hashes.
 
+With Cabal 3.16.1.0, a `.cabal` edit or changed build option can replan using a
+cached compiler but rediscover native `ghc-pkg` from `PATH`, despite
+`--with-hc-pkg`. The build creates `tool-bin/ghc-pkg` as a symlink to the selected
+Wasm package manager and prepends it to the Cabal process's `PATH` only. No
+global toolchain changes or cache deletion are needed. To check reconfiguration,
+set `build` to the existing `<cache>/haskell-<key>` directory prepared by the
+script and run from the repository root in the same toolchain environment:
+
+```sh
+PATH="$build/tool-bin:$PWD/web:$PATH" "${CABAL:-cabal}" build exe:afterlight-browser \
+  --project-file="$build/cabal.project" --builddir="$build/dist" \
+  --with-compiler="$(command -v wasm32-wasi-ghc)" \
+  --with-hc-pkg="$(command -v wasm32-wasi-ghc-pkg)" \
+  --ghc-options=-pgmlwasm-link --disable-executable-stripping --dry-run -v3
+```
+
+The verbose log should select Wasm `ghc-pkg` 9.14.1.20260330 even when it reports
+`compiler` unchanged and `elaborated-plan` changed. Repeat without
+`--disable-executable-stripping` to check the return to normal build options.
+
 ## Assets and HTTP delivery
 
 `prepare-assets.py` subsets the supplied Noto Sans CJK JP OpenType font while
 retaining its glyph outlines, hints, layout features and name/license metadata.
-It keeps ASCII, the source `fonts/glyphs.txt` and every printable character in
-`src/**/*.hs`, covering `uiCorpus`, notices, place names, menus and photo labels.
-The generated `glyphs.txt` contains that same union, so raylib loads the complete
-set. Put text that comes from outside those literal sources (including Unicode
-escape sequences) into the supplied `glyphs.txt`. Missing font characters fail
-the build instead of silently producing blank text. The [fontTools subsetter](https://fonttools.readthedocs.io/en/latest/subset/index.html)
+ASCII and the supplied `fonts/glyphs.txt` are required; missing glyphs fail the
+build. Printable characters from `src/**/*.hs` are conservative candidates,
+including `uiCorpus`, notices, place names, menus and photo labels. Candidates
+are intersected with the original font's character map, so an unsupported emoji
+in a comment does not break the build. The generated `glyphs.txt` lists the
+resulting set for raylib. Put text from outside those literal sources (including
+Unicode escape sequences) into the supplied `glyphs.txt`. Check actual UI text
+for missing glyphs as well: subset generation cannot certify all displayed text.
+The [fontTools subsetter](https://fonttools.readthedocs.io/en/latest/subset/index.html)
 runs directly from the verified cached wheel; no pip install or native extension
 is required. The original assets stay intact and the font's OFL license is copied
 to the output. Audio stays as the original WAV bytes.
@@ -147,11 +170,16 @@ focus pause/resume and orderly shutdown were also exercised. The rebuilt
 output was separately served and its 3D scene rendered successfully.
 
 The final host adds automatic staged preparation, viewport sizing, capture-
-confirmed engagement, and explicit pause transitions. Its 37 JavaScript tests,
-six asset/HTTP checks, full-scene startup in both browsers, ready-scene resize,
-fullscreen entry/exit in the in-app browser, and missing-script retry display passed. A fresh-origin in-app run reached its
+confirmed engagement, and explicit pause transitions. Its 42 JavaScript tests
+and eight asset/HTTP checks pass, including full-density sizing, explicit render
+scales, asset transfer during compilation and source-comment font handling.
+Full-scene startup in both browsers, ready-scene resize, fullscreen entry/exit
+in the in-app browser, and missing-script retry display were also checked. A fresh-origin in-app run reached its
 first visible content at 0.10 seconds and its scene at 14.23 seconds; same-tab
-reload reached the scene at 11.83 seconds. See the report for conditions.
+reload reached the scene at 11.83 seconds. Those startup observations predate
+the display-density default. The current build was rendered at DPR 1.25 with
+high/standard/light settings, fullscreen transitions and preference persistence.
+See the report for conditions and a same-scene rendering comparison.
 
 Automation still rejected Pointer Lock with WrongDocumentError despite fresh
 activation (UnknownError inside in-app fullscreen). Refusal/retry and Chrome's

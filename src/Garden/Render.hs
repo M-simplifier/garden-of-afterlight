@@ -32,7 +32,9 @@ renderSceneWith portrait resources view pulse = do
   width <- getScreenWidth
   height <- getScreenHeight
   target <- renderTarget resources width height
-  let ws = resourceShader resources
+  let sceneWidth = texture'width (renderTexture'texture target)
+      sceneHeight = texture'height (renderTexture'texture target)
+      ws = resourceShader resources
       ss = resourceSky resources
       ps = resourcePost resources
       f = sceneForward view
@@ -48,7 +50,7 @@ renderSceneWith portrait resources view pulse = do
   uniform resources ws "lightCount" (ShaderUniformInt (length points))
   when (not (null points)) $
     setShaderValueV ws "lightPositions" (ShaderUniformVec3V (map toRay points)) (resourceWindow resources)
-  uniform resources ss "resolution" (ShaderUniformVec2 (Vector2 (fromIntegral width) (fromIntegral height)))
+  uniform resources ss "resolution" (ShaderUniformVec2 (Vector2 (fromIntegral sceneWidth) (fromIntegral sceneHeight)))
   uniform resources ss "forwardView" (ShaderUniformVec3 (toRay f))
   uniform resources ss "rightView" (ShaderUniformVec3 (toRay right))
   uniform resources ss "upView" (ShaderUniformVec3 (toRay upCorrect))
@@ -57,7 +59,7 @@ renderSceneWith portrait resources view pulse = do
   uniform resources ss "veil" (ShaderUniformFloat (sceneVeil view))
   textureMode target $ do
     clearBackground (Color 110 160 166 255)
-    withShader ss (drawRectangle 0 0 width height white)
+    withShader ss (drawRectangle 0 0 sceneWidth sceneHeight white)
     mode3D camera $ do
       (_, chunks) <- readIORef (resourceChunks resources)
       let visible (cx, cy, cz) =
@@ -65,7 +67,7 @@ renderSceneWith portrait resources view pulse = do
                 depth = dot delta f
                 side = abs (dot delta right)
                 vertical = abs (dot delta upCorrect)
-             in depth > (-6) && depth < 420 && side < max 0 depth * lens * fromIntegral width / fromIntegral height + 8 && vertical < max 0 depth * lens + 8
+             in depth > (-6) && depth < 420 && side < max 0 depth * lens * fromIntegral sceneWidth / fromIntegral sceneHeight + 8 && vertical < max 0 depth * lens + 8
       forM_ (M.toList chunks) $ \(key, models) ->
         when (visible key) $
           forM_ models (\m -> drawPrepared m (V3 0 0 0) 0 1 white)
@@ -78,7 +80,7 @@ renderSceneWith portrait resources view pulse = do
         TerrainTarget c _ (Ore g) _ -> drawCubeWiresV (toRay (center c)) (Vector3 1.014 1.014 1.014) (toColor (palette (Ore g)) 0.82)
         TerrainTarget c _ _ _ -> drawCubeWiresV (toRay (center c)) (Vector3 1.012 1.012 1.012) (Color 232 224 167 150)
         _ -> pure ()
-  uniform resources ps "resolution" (ShaderUniformVec2 (Vector2 (fromIntegral width) (fromIntegral height)))
+  uniform resources ps "resolution" (ShaderUniformVec2 (Vector2 (fromIntegral sceneWidth) (fromIntegral sceneHeight)))
   let grading = case portrait of
         Nothing -> Vector3 0 0 1
         Just p -> Vector3 (photoExposure p) (fromIntegral (fromEnum (photoGrade p))) (if photoBloom p then 1 else 0)
@@ -87,7 +89,7 @@ renderSceneWith portrait resources view pulse = do
   withShader ps $
     drawTexturePro
       (renderTexture'texture target)
-      (Rectangle 0 0 (fromIntegral width) (negate (fromIntegral height)))
+      (Rectangle 0 0 (fromIntegral sceneWidth) (negate (fromIntegral sceneHeight)))
       (Rectangle 0 0 (fromIntegral width) (fromIntegral height))
       (Vector2 0 0)
       0

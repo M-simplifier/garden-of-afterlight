@@ -3,6 +3,7 @@
 
 module Garden.Render.Resources
   ( Resources (..),
+    RenderQuality (..),
     PreparedModel,
     acquireResources,
     releaseResources,
@@ -52,6 +53,9 @@ data PreparedModel = PreparedModel !Model !(Ptr Model)
 
 data PreparedFont = PreparedFont !Font !(Ptr Font)
 
+data RenderQuality = FullQuality | BalancedQuality | LightQuality
+  deriving (Eq)
+
 data Resources = Resources
   { resourceWindow :: WindowResources,
     resourceShader :: Shader,
@@ -62,6 +66,7 @@ data Resources = Resources
     resourceKin :: M.Map Gem [PreparedModel],
     resourceEnemy :: M.Map Threat [PreparedModel],
     resourceTarget :: IORef (Int, Int, RenderTexture),
+    resourceQuality :: IORef RenderQuality,
     resourceLights :: IORef [V3],
     resourceRelic :: [PreparedModel]
   }
@@ -106,9 +111,10 @@ acquireResources window = mask_ $ do
       target <- own (loadRenderTexture w h) (`unloadRenderTexture` window)
       _ <- setTextureFilter (renderTexture'texture target) TextureFilterBilinear
       targetRef <- newIORef (w, h, target)
+      quality <- newIORef FullQuality
       lights <- newIORef []
       relic <- geometry worldShader relicGeometry
-      pure (Resources window worldShader skyShader postShader preparedFont chunks kin enemy targetRef lights relic)
+      pure (Resources window worldShader skyShader postShader preparedFont chunks kin enemy targetRef quality lights relic)
     ) `onException` (readIORef cleanupRef >>= releaseAll)
 
 releaseResources :: Resources -> IO ()
@@ -321,7 +327,12 @@ chunkEntries :: Chunk -> M.Map Cell Material -> [(Cell, Material)]
 chunkEntries (cx, cy, cz) cells = [(c, m) | x <- [cx * 4 .. cx * 4 + 3], y <- [cy * 8 .. cy * 8 + 7], z <- [cz * 4 .. cz * 4 + 3], let c = Cell x y z, Just m <- [M.lookup c cells]]
 
 renderTarget :: Resources -> Int -> Int -> IO RenderTexture
-renderTarget resources width height = mask_ $ do
+renderTarget resources screenWidth screenHeight = mask_ $ do
+  quality <- readIORef (resourceQuality resources)
+  -- Scale only the scene texture; window coordinates and UI retain full detail.
+  let percent = case quality of FullQuality -> 100; BalancedQuality -> 75; LightQuality -> 50
+      width = max 1 ((screenWidth * percent + 50) `div` 100)
+      height = max 1 ((screenHeight * percent + 50) `div` 100)
   (w, h, old) <- readIORef (resourceTarget resources)
   if (w, h) == (width, height)
     then pure old

@@ -3,12 +3,14 @@
 
 module Garden.Runtime
   ( GardenApp,
+    RenderQuality (..),
     StartupStage (..),
     startupProgress,
     gardenReady,
     beginGarden,
     previewGarden,
     setGardenActive,
+    setGardenQuality,
     startupGarden,
     stepGarden,
     shouldCloseGarden,
@@ -256,6 +258,19 @@ previewGarden (GardenApp stateRef) = do
       let view = project world
       drawing $ renderScene resources view 0 >> renderInterface resources view False 120
     _ -> pure ()
+
+-- | Presentation-only preference. Apply after resource acquisition and before
+-- warmup to include it in the first preview; earlier calls are a no-op.
+setGardenQuality :: GardenApp -> RenderQuality -> IO ()
+setGardenQuality (GardenApp stateRef) quality = do
+  state <- readIORef stateRef
+  case state of
+    Loading (LoadChunks _ resources _ _ _ _) -> apply resources
+    Loading (Warmup _ resources _ _) -> apply resources
+    Running (Session resources _ _ _ _ _ _ _ _) _ -> apply resources
+    _ -> pure ()
+  where
+    apply resources = writeIORef (resourceQuality resources) quality
 
 -- | A browser activation changes only host control. Preserve the photo camera
 -- and world, and discard elapsed loading/background time before resuming.

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { compileModule, downloads } from '../src/loading.js';
-import { drawingSize } from '../src/viewport.js';
+import { drawingSize, renderScale } from '../src/viewport.js';
 
 test('decoded progress does not confuse compressed Content-Length with manifest bytes', async () => {
   const values = [];
@@ -35,10 +35,20 @@ test('Wasm compilation receives the original response so browser cache metadata 
   assert.equal(transfer.snapshot().loaded, 8);
 });
 
-test('large viewports keep aspect ratio within pixel rounding and respect the render budget', () => {
-  for (const [width, height] of [[3840, 2160], [1969, 1272], [1400, 900], [800, 600]]) {
-    const result = drawingSize(width, height);
-    assert.ok(result.width * result.height <= 1280 * 720);
-    assert.ok(Math.abs(result.width / result.height - width / height) < 0.004);
-  }
+test('default rendering preserves display pixels, including high-DPI displays', () => {
+  assert.deepEqual(drawingSize(1920, 1080), { width: 1920, height: 1080 });
+  assert.deepEqual(drawingSize(1280, 720, { pixelRatio: 2 }), { width: 2560, height: 1440 });
+  assert.deepEqual(drawingSize(1200, 800, { pixelRatio: 1.25 }), { width: 1500, height: 1000 });
+});
+
+test('quality is an explicit scale choice and corrupt preferences return to full quality', () => {
+  for (const value of [null, '', 'fast', 0, -1, 2]) assert.equal(renderScale(value), 1);
+  assert.equal(renderScale('1'), 1);
+  assert.equal(renderScale('0.75'), 0.75);
+  assert.equal(renderScale('0.5'), 0.5);
+});
+
+test('hardware limits preserve aspect ratio without becoming a fixed quality ceiling', () => {
+  assert.deepEqual(drawingSize(3840, 2160, { maxDimension: 2048 }), { width: 2048, height: 1152 });
+  assert.deepEqual(drawingSize(3840, 2160, { maxDimension: 8192 }), { width: 3840, height: 2160 });
 });

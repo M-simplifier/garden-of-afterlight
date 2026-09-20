@@ -8,6 +8,12 @@ const KEY = "afterlight:saves:v1";
 const utf8 = new TextEncoder();
 const text = new TextDecoder();
 
+function deferred() {
+  let resolve, reject;
+  const promise = new Promise((yes, no) => { resolve = yes; reject = no; });
+  return { promise, resolve, reject };
+}
+
 function fixture(store = new Map()) {
   const memory = new WebAssembly.Memory({ initial: 1 });
   const rootFd = new PreopenDirectory(".", new Map());
@@ -54,6 +60,66 @@ test("one fetched asset is installed at the same path in raylib and WASI", async
   assert.equal(assets.count, 1);
   assert.deepEqual(installed.get("/assets/fonts/glyphs.txt"), bytes);
   assert.equal(run.read("assets/fonts/glyphs.txt"), "庭の文字");
+});
+
+test("four concurrent downloads keep advancing while raylib FS is still preparing", async () => {
+  const run = fixture();
+  const fs = deferred();
+  const manifest = Array.from({ length: 6 }, (_, index) => ({ path: `assets/file${index}.txt` }));
+  const bodies = manifest.map(() => deferred());
+  const installed = new Map(), fetched = [];
+  let active = 0, maximum = 0;
+  const loaded = loadAssets(fs.promise, run.root, async path => {
+    if (path.includes("manifest")) return { ok: true, json: async () => manifest };
+    const index = manifest.findIndex(entry => entry.path === path);
+    fetched.push(path);
+    maximum = Math.max(maximum, ++active);
+    return { ok: true, arrayBuffer: async () => {
+      const bytes = await bodies[index].promise;
+      active--;
+      return bytes.buffer;
+    } };
+  });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(fetched.length, 4);
+  for (const index of [0, 1]) {
+    bodies[index].resolve(utf8.encode(`file${index}`));
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(fetched.length, 5 + index);
+  }
+  assert.equal(maximum, 4);
+  assert.equal(new Set(fetched).size, 6);
+  assert.equal(installed.size, 0);
+  for (let index = 2; index < bodies.length; index++) bodies[index].resolve(utf8.encode(`file${index}`));
+  fs.resolve({ mkdirTree() {}, writeFile(path, data) { installed.set(path, data); } });
+  assert.deepEqual(await loaded, { count: 6, bytes: 30, missingManifest: false });
+  for (const [index, { path }] of manifest.entries()) {
+    assert.equal(text.decode(installed.get(`/${path}`)), `file${index}`);
+    assert.equal(run.read(path), `file${index}`);
+  }
+});
+
+test("FS failure rejects while the manifest is pending and consumes a later fetch failure", async () => {
+  const run = fixture(), fs = deferred(), manifest = deferred();
+  const failure = new Error("FS initialization failed");
+  const loaded = loadAssets(fs.promise, run.root, () => manifest.promise);
+  const rejected = assert.rejects(loaded, error => error === failure);
+  fs.reject(failure);
+  await rejected;
+  manifest.reject(new Error("Late manifest fetch failure"));
+  await new Promise(resolve => setImmediate(resolve));
+});
+
+test("asset fetch and FS installation failures reach the loader caller", async () => {
+  for (const stage of ["fetch", "install"]) {
+    const run = fixture(), failure = new Error(`${stage} failed`);
+    await assert.rejects(loadAssets({ mkdirTree() {}, writeFile() { throw failure; } },
+      run.root, async path => {
+        if (path.includes("manifest")) return { ok: true, json: async () => [{ path: "assets/file.txt" }] };
+        if (stage === "fetch") throw failure;
+        return { ok: true, arrayBuffer: async () => utf8.encode("file").buffer };
+      }), error => error === failure);
+  }
 });
 
 test("missing manifest permits a small sample; missing listed asset fails", async () => {

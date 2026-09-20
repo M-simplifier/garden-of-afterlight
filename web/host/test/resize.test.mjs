@@ -47,15 +47,16 @@ test('normal render resize updates backing dimensions before both C callbacks', 
   assert.equal(f.canvas.style, f.style);
 });
 
-test('fullscreen entry and exit retain the host render budget and CSS ownership', () => {
+test('fullscreen entry and exit retain display density and CSS ownership', () => {
   const f = fixture(), game = { id: 'game' };
   f.document.fullscreen = true;
   f.document.fullscreenElement = game;
-  const size = drawingSize(2576, 1408);
+  const size = drawingSize(2576, 1408, { pixelRatio: 1.25 });
   f.GLFW.setWindowSize(1, size.width, size.height);
   assert.equal(f.document.fullscreenElement, game);
   assert.equal(f.document.fullscreen, true);
-  assert.ok(f.canvas.width * f.canvas.height <= 1280 * 720);
+  assert.equal(f.canvas.width, 3220);
+  assert.equal(f.canvas.height, 1760);
   assert.deepEqual(f.dimensions(), [size.width, size.height, size.width, size.height, size.width, size.height]);
   assert.deepEqual(f.calls, [[10, 1, size.width, size.height], [20, 1, size.width, size.height]]);
   assert.equal(f.canvas.style, f.style);

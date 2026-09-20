@@ -4,7 +4,8 @@ import { attachPersistence, gameEnvironment, loadAssets } from "./files.js";
 import { canvasInput, errorText } from "./input.js";
 import { photoDownload, screenshotBridge } from "./photos.js";
 import { compileModule, downloads } from './loading.js';
-import { drawingSize } from './viewport.js';
+import { drawingSize, renderScale } from './viewport.js';
+import { createRenderCheck } from './render-check.js';
 
 const MIB = 1024 * 1024;
 const RAYLIB_LIMIT = 128 * MIB;
@@ -16,6 +17,10 @@ const progress = document.querySelector('#progress');
 const detail = document.querySelector('#detail');
 const enter = document.querySelector('#enter');
 const fullscreenButton = document.querySelector('#fullscreen');
+const quality = document.querySelector('#quality');
+const qualityKey = 'afterlight:render-scale:v1';
+try { quality.value = String(renderScale(localStorage.getItem(qualityKey))); } catch { /* Preferences are optional. */ }
+const renderCheck = createRenderCheck(new URLSearchParams(location.search).get('render-check') === '1');
 const captureMessage = document.querySelector('#capture-message');
 const downloadPhoto = photoDownload(document.querySelector("#photo-download"));
 const stats = { frames: 0, ffiCalls: 0, totalFrameMs: 0, maxFrameMs: 0, lastFrameMs: 0, errors: [] };
@@ -25,7 +30,10 @@ const importantByMessage = new Map();
 const focusEvents = [];
 let instance, raylib, state, frameId, bootId, input, running = false;
 let requestedActivity, firstPlay = true, stopped = false;
-let resizePending = false, bootCanceled = false;
+let resizePending = false, qualityPending = false, bootCanceled = false;
+let maxRenderDimension = Infinity, displayPixelRatio = window.devicePixelRatio;
+const desiredSize = () => drawingSize(game.clientWidth, game.clientHeight,
+  { pixelRatio: window.devicePixelRatio, maxDimension: maxRenderDimension });
 const boot = { began: performance.now(), phase: 'download', network: null, stages: {},
   modulesReadyMs: null, beginMs: null, readyMs: null, firstInputMs: null, maxStepMs: 0 };
 const inspection = { stats, logs, importantLogs, focusEvents, memory, layout: undefined, ready: false,
@@ -59,6 +67,9 @@ function publishDiagnostics() {
   diagnosticsNode.textContent = JSON.stringify({
     ready: inspection.ready, running, memoryBytes: memory.buffer.byteLength,
     boot, audio: raylib?.audioState?.(),
+    rendering: { pixelRatio: window.devicePixelRatio, scale: Number(quality.value),
+      width: canvas.width, height: canvas.height, maxDimension: maxRenderDimension },
+    renderCheck: renderCheck?.snapshot(),
     paints: performance.getEntriesByType('paint').map(({ name, startTime }) => ({ name, startTime })),
     raylibBreak: inspection.raylibBreak, layout: inspection.layout,
     environment: inspection.environment, assets: inspection.assets,
@@ -155,7 +166,7 @@ function checkPartition() {
   return layout;
 }
 
-function frame() {
+function frame(at) {
   if (!running) return;
   try {
     if (instance.exports.shouldClose(state)) {
@@ -171,18 +182,35 @@ function frame() {
       document.querySelector('#retry').hidden = false;
       return;
     }
-    if (resizePending) {
+    if (resizePending || qualityPending || displayPixelRatio !== window.devicePixelRatio) {
+      let redraw = qualityPending;
+      if (qualityPending) {
+        instance.exports.setQuality(state, Math.round(100 * renderScale(quality.value)));
+        refreshRaylibMemory(memory, raylib);
+        qualityPending = false;
+      }
       resizePending = false;
-      const size = drawingSize(game.clientWidth, game.clientHeight);
+      displayPixelRatio = window.devicePixelRatio;
+      const size = desiredSize();
       if (canvas.width !== size.width || canvas.height !== size.height) {
         raylib._SetWindowSize_(size.width, size.height);
+        redraw = true;
+      }
+      if (redraw) {
+        renderCheck?.reset();
         if (firstPlay) {
           instance.exports.preview(state);
           refreshRaylibMemory(memory, raylib);
         }
       }
     }
-    if (firstPlay) { frameId = requestAnimationFrame(frame); return; }
+    if (firstPlay) {
+      renderCheck?.sample(() => {
+        instance.exports.preview(state);
+        refreshRaylibMemory(memory, raylib);
+      }, at);
+      frameId = requestAnimationFrame(frame); return;
+    }
     if (requestedActivity !== undefined) {
       const active = requestedActivity;
       requestedActivity = undefined;
@@ -221,6 +249,8 @@ function prepare() {
     phase(`prepare-${stage}`, phaseNames[stage], done, total);
     detail.textContent = stage === 3 ? `${done.toLocaleString()} / ${total.toLocaleString()}` : 'そのまま、少しお待ちください';
     const began = performance.now();
+    // Select the scene target before warmup. Canvas/UI remain at display density.
+    if (stage === 4) instance.exports.setQuality(state, Math.round(100 * renderScale(quality.value)));
     state = instance.exports.mainLoop(state);
     refreshRaylibMemory(memory, raylib);
     const elapsed = performance.now() - began;
@@ -254,7 +284,7 @@ function schedulePreparation() {
 async function load() {
   phase('download', '音と光を届けています');
   const preopen = new PreopenDirectory('.', new Map());
-  const size = drawingSize(game.clientWidth, game.clientHeight);
+  const size = desiredSize();
   const environment = gameEnvironment(new URLSearchParams(location.search), size);
   const wasi = new WASI(['afterlight'], environment, [
     new OpenFile(new File([])),
@@ -324,6 +354,15 @@ async function load() {
   const began = performance.now();
   state = instance.exports.startup();
   refreshRaylibMemory(memory, raylib);
+  // Query hardware limits once, after raylib creates its context. This is an
+  // allocation boundary, not a quality tier; avoid WebGL queries in each frame.
+  const gl = canvas.getContext('webgl2');
+  if (!gl) throw new Error('WebGL 2 context is unavailable');
+  maxRenderDimension = Math.min(gl.getParameter(gl.MAX_TEXTURE_SIZE), gl.getParameter(gl.MAX_RENDERBUFFER_SIZE));
+  const limitedSize = desiredSize();
+  if (canvas.width !== limitedSize.width || canvas.height !== limitedSize.height) {
+    raylib._SetWindowSize_(limitedSize.width, limitedSize.height);
+  }
   boot.beginMs = performance.now() - began;
   boot.maxStepMs = Math.max(boot.maxStepMs, boot.beginMs);
   schedulePreparation();
@@ -361,6 +400,10 @@ input = canvasInput({ canvas, document, keyboardTarget: window, fullscreenTarget
   },
 });
 enter.addEventListener('click', event => input.engage(event));
+quality.addEventListener('change', () => {
+  qualityPending = true;
+  try { localStorage.setItem(qualityKey, quality.value); } catch { /* Keep the choice for this visit. */ }
+});
 fullscreenButton.addEventListener('click', () => input.fullscreen());
 document.addEventListener('fullscreenchange', () => {
   const active = document.fullscreenElement === game;

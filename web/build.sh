@@ -110,9 +110,14 @@ path = pathlib.Path(target)
 if not path.exists() or path.read_text() != text:
     path.write_text(text)
 PY
+# Cabal 3.16 can rediscover ghc-pkg when reusing its compiler cache, despite
+# --with-hc-pkg. Keep that fallback inside this build's cross toolchain too.
+tool_bin="$build/tool-bin"
+mkdir -p -- "$tool_bin"
+ln -sfn -- "$(command -v wasm32-wasi-ghc-pkg)" "$tool_bin/ghc-pkg"
 # A program name on PATH also handles repository paths containing spaces.
 export PATH="$web:$PATH"
-"$cabal" build exe:afterlight-browser --project-file="$build/cabal.project" \
+PATH="$tool_bin:$PATH" "$cabal" build exe:afterlight-browser --project-file="$build/cabal.project" \
   --with-compiler="$(command -v wasm32-wasi-ghc)" --with-hc-pkg="$(command -v wasm32-wasi-ghc-pkg)" \
   --builddir="$build/dist" -j"$jobs" --ghc-options=-pgmlwasm-link
 artifact=$(python3 - "$build/dist/cache/plan.json" <<'PY'

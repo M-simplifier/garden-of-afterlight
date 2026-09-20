@@ -9,8 +9,8 @@
   * { box-sizing: border-box; }
   html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; }
   button, a { -webkit-tap-highlight-color: transparent; }
-  button { font: inherit; color: inherit; cursor: pointer; }
-  button:focus-visible, a:focus-visible { outline: 2px solid #e5d79c; outline-offset: 6px; }
+  button, select { font: inherit; color: inherit; cursor: pointer; }
+  button:focus-visible, select:focus-visible, a:focus-visible { outline: 2px solid #e5d79c; outline-offset: 6px; }
   [hidden] { display: none !important; }
   #game { position: fixed; inset: 0; width: 100%; height: 100dvh; overflow: hidden; isolation: isolate; }
   #canvas { display: block; width: 100%; height: 100%; outline: none; background: #102c30; }
@@ -45,8 +45,9 @@
     text-shadow: 0 1px 5px #001820; line-height: 1.8; margin: .9rem 0 0; }
   #controls { position: absolute; right: max(1.25rem, env(safe-area-inset-right)); top: max(1.25rem, env(safe-area-inset-top));
     display: flex; align-items: center; gap: .6rem; }
-  #controls button, #controls a, #retry { background: #102c30dd; border: 1px solid #b6ccbd66; border-radius: 2px;
+  #controls button, #controls a, #controls select, #retry { background: #102c30dd; border: 1px solid #b6ccbd66; border-radius: 2px;
     padding: .65rem .9rem; font-size: .75rem; color: #f3efe2; text-decoration: none; }
+  .quality { display: flex; align-items: center; gap: .5rem; font-size: .75rem; text-shadow: 0 1px 5px #001820; }
   #retry { margin-top: 1.7rem; }
   #error-details { margin-top: 1.5rem; font-size: .72rem; text-align: left; color: #d1bda6; }
   #error-text { max-height: 25vh; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
@@ -75,6 +76,7 @@
     <p id="capture-message">WASDで歩く · マウスで見回す · Escでメニュー</p>
   </div>
   <nav id="controls" aria-label="画面と写真">
+    <label class="quality">画質 <select id="quality" aria-label="画質"><option value="1">高</option><option value="0.75">標準</option><option value="0.5">軽量</option></select></label>
     <a id="photo-download" hidden>写真を保存</a>
     <button id="fullscreen" title="全画面に切り替え（F11）" aria-label="全画面に切り替え">⛶ 全画面</button>
   </nav>

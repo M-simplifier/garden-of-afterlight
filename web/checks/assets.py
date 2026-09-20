@@ -8,6 +8,7 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import shutil
 import sys
 import tempfile
 import threading
@@ -109,6 +110,45 @@ class HttpChecks(unittest.TestCase):
 
 
 class AssetChecks(unittest.TestCase):
+    def test_source_comment_can_contain_characters_missing_from_font(self):
+        if not OPTIONS.assets:
+            self.skipTest("Pass --assets to compare the original font")
+        from fontTools.ttLib import TTFont
+
+        source = OPTIONS.assets / assets_module.FONT
+        with TTFont(source) as font:
+            unsupported = next(point for point in range(0x1F600, 0x1F650) if point not in font.getBestCmap())
+        with tempfile.TemporaryDirectory() as directory:
+            repo = Path(directory)
+            (repo / "src").mkdir()
+            code = repo / "src/Main.hs"
+            code.write_text('module Main where\nlabel = "庭"\n', encoding="utf-8")
+            before = assets_module.font_codepoints(OPTIONS.assets, repo)
+            code.write_text(code.read_text(encoding="utf-8") + f"-- Comment {chr(unsupported)}\n", encoding="utf-8")
+            after = assets_module.font_codepoints(OPTIONS.assets, repo)
+            self.assertEqual(after, before, "An unsupported source comment must not alter the font subset")
+            assets_module.subset_font(source, repo / "subset.otf", after)
+
+    def test_explicit_glyphs_still_require_font_coverage(self):
+        if not OPTIONS.assets:
+            self.skipTest("Pass --assets to compare the original font")
+        from fontTools.ttLib import TTFont
+
+        source = OPTIONS.assets / assets_module.FONT
+        with TTFont(source) as font:
+            unsupported = next(point for point in range(0x1F600, 0x1F650) if point not in font.getBestCmap())
+        with tempfile.TemporaryDirectory() as directory:
+            repo = Path(directory)
+            (repo / "src").mkdir()
+            (repo / "src/Main.hs").write_text("module Main where\n", encoding="utf-8")
+            assets = repo / "assets"
+            (assets / "fonts").mkdir(parents=True)
+            shutil.copyfile(source, assets / assets_module.FONT)
+            (assets / "fonts/glyphs.txt").write_text(chr(unsupported), encoding="utf-8")
+            with self.assertRaisesRegex(SystemExit, f"Font lacks required characters:.*U\\+{unsupported:04X}"):
+                points = assets_module.font_codepoints(assets, repo)
+                assets_module.subset_font(assets / assets_module.FONT, repo / "subset.otf", points)
+
     def test_prepared_site(self):
         if not OPTIONS.site:
             self.skipTest("Pass --site to check a generated build")

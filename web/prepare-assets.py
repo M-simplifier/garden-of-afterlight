@@ -13,19 +13,7 @@ FONTTOOLS_VERSION = "4.61.1"
 FONT = "fonts/NotoSansCJKjp-Regular.otf"
 
 
-def font_codepoints(source: Path, repo: Path) -> list[int]:
-    # Keep a conservative superset: literal text anywhere in the game source
-    # includes uiCorpus, notices, place names, menus and photo-mode labels.
-    # External/dynamic text belongs in glyphs.txt, including escaped literals.
-    text = (source / "fonts/glyphs.txt").read_text(encoding="utf-8")
-    sources = sorted((repo / "src").rglob("*.hs"))
-    if not sources:
-        raise SystemExit(f"No Haskell game sources under {repo / 'src'}")
-    text += "".join(path.read_text(encoding="utf-8") for path in sources)
-    return sorted(set(range(32, 127)) | {ord(char) for char in text if char.isprintable()})
-
-
-def subset_font(source: Path, target: Path, codepoints: list[int]) -> None:
+def _font_tools():
     try:
         import fontTools
         from fontTools import subset
@@ -35,6 +23,30 @@ def subset_font(source: Path, target: Path, codepoints: list[int]) -> None:
 
     if fontTools.__version__ != FONTTOOLS_VERSION:
         raise SystemExit(f"Expected fontTools {FONTTOOLS_VERSION}; use web/build.sh")
+    return subset, TTFont
+
+
+def font_codepoints(source: Path, repo: Path) -> list[int]:
+    _, TTFont = _font_tools()
+    text = (source / "fonts/glyphs.txt").read_text(encoding="utf-8")
+    required = set(range(32, 127)) | {ord(char) for char in text if char.isprintable()}
+    with TTFont(source / FONT) as font:
+        available = set(font.getBestCmap())
+    missing = required - available
+    if missing:
+        raise SystemExit("Font lacks required characters: " + ", ".join(f"U+{cp:04X}" for cp in sorted(missing)))
+    # Source text is a conservative candidate set, including comments and names.
+    # Keep supported glyphs without making unrelated text a font requirement.
+    sources = sorted((repo / "src").rglob("*.hs"))
+    if not sources:
+        raise SystemExit(f"No Haskell game sources under {repo / 'src'}")
+    text = "".join(path.read_text(encoding="utf-8") for path in sources)
+    candidates = {ord(char) for char in text if char.isprintable()}
+    return sorted(required | (candidates & available))
+
+
+def subset_font(source: Path, target: Path, codepoints: list[int]) -> None:
+    subset, TTFont = _font_tools()
     with TTFont(source, recalcTimestamp=False) as font:
         missing = set(codepoints) - font.getBestCmap().keys()
         if missing:

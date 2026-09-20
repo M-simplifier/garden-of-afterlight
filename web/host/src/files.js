@@ -61,39 +61,48 @@ function findDirectory(root, wanted, prefix = "") {
 }
 
 export async function loadAssets(raylibFS, root, fetchFile = fetch, expect = () => {}) {
-  const response = await fetchFile("./assets-manifest.json");
-  if (response.status === 404) return { count: 0, bytes: 0, missingManifest: true };
-  if (!response.ok) throw new Error(`Asset manifest: HTTP ${response.status}`);
-  const manifest = await response.json();
-  if (!Array.isArray(manifest)) throw new Error("Asset manifest must be an array");
-  const seen = new Set();
-  for (const entry of manifest) {
-    const path = entry?.path;
-    if (typeof path !== "string" || !path.startsWith("assets/")
-        || path.split("/").some(part => !part || part === "." || part === "..")
-        || /[\\\0:?#]/.test(path) || seen.has(path)) {
-      throw new Error(`Invalid or duplicate asset path: ${path}`);
+  async function fetchAll() {
+    const response = await fetchFile("./assets-manifest.json");
+    if (response.status === 404) return { files: [], missingManifest: true };
+    if (!response.ok) throw new Error(`Asset manifest: HTTP ${response.status}`);
+    const manifest = await response.json();
+    if (!Array.isArray(manifest)) throw new Error("Asset manifest must be an array");
+    const seen = new Set();
+    for (const entry of manifest) {
+      const path = entry?.path;
+      if (typeof path !== "string" || !path.startsWith("assets/")
+          || path.split("/").some(part => !part || part === "." || part === "..")
+          || /[\\\0:?#]/.test(path) || seen.has(path)) {
+        throw new Error(`Invalid or duplicate asset path: ${path}`);
+      }
+      seen.add(path);
+      expect(path, entry.bytes);
     }
-    seen.add(path);
-    expect(path, entry.bytes);
+    const files = new Array(manifest.length);
+    let cursor = 0;
+    await Promise.all(Array.from({ length: Math.min(4, manifest.length) }, async () => {
+      while (cursor < manifest.length) {
+        const index = cursor++;
+        const { path } = manifest[index];
+        const asset = await fetchFile(path);
+        if (!asset.ok) throw new Error(`Asset ${path}: HTTP ${asset.status}`);
+        files[index] = { path, data: new Uint8Array(await asset.arrayBuffer()) };
+      }
+    }));
+    return { files, missingManifest: false };
   }
-  if (manifest.length && !raylibFS) throw new Error("Export FS from Emscripten for asset loading");
-  let cursor = 0;
+  // Fetching depends on the manifest, not on raylib compilation. Observe both
+  // promises immediately, including a failure while the other is still pending.
+  const [fs, { files, missingManifest }] = await Promise.all([raylibFS, fetchAll()]);
+  if (files.length && !fs) throw new Error("Export FS from Emscripten for asset loading");
   let bytes = 0;
-  await Promise.all(Array.from({ length: Math.min(4, manifest.length) }, async () => {
-    while (cursor < manifest.length) {
-      const { path } = manifest[cursor++];
-      const asset = await fetchFile(path);
-      if (!asset.ok) throw new Error(`Asset ${path}: HTTP ${asset.status}`);
-      const data = new Uint8Array(await asset.arrayBuffer());
-      const fs = await raylibFS;
-      fs.mkdirTree(`/${path.slice(0, path.lastIndexOf("/"))}`);
-      fs.writeFile(`/${path}`, data);
-      putFile(root, path, data, true);
-      bytes += data.byteLength;
-    }
-  }));
-  return { count: manifest.length, bytes, missingManifest: false };
+  for (const { path, data } of files) {
+    fs.mkdirTree(`/${path.slice(0, path.lastIndexOf("/"))}`);
+    fs.writeFile(`/${path}`, data);
+    putFile(root, path, data, true);
+    bytes += data.byteLength;
+  }
+  return { count: files.length, bytes, missingManifest };
 }
 
 function toBase64(bytes) {
