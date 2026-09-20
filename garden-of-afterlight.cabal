@@ -27,9 +27,9 @@ common shared-options
         reactive-banana >=1.3 && <1.4
 
 executable noema-garden
+    import: shared-options
     if !flag(native)
         buildable: False
-    import: shared-options
     main-is: GardenMain.hs
     hs-source-dirs: tools, src
     ghc-options: -O2 -threaded -rtsopts -with-rtsopts=-N2 -optl-mwindows
@@ -42,9 +42,9 @@ executable noema-garden
         Garden.Audio, Garden.Soundscape
 
 executable noema-garden-audio
+    import: shared-options
     if !flag(native)
         buildable: False
-    import: shared-options
     ghc-options: -O2
     main-is: GardenAudio.hs
     hs-source-dirs: tools, src
