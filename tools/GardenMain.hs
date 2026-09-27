@@ -1,13 +1,14 @@
 module Main where
 
-import Control.Exception (IOException, try)
+import Control.Exception (IOException, SomeException, displayException, try)
 import GHC.IO.Encoding (setLocaleEncoding, utf8)
 import GHC.IO.Handle (hDuplicateTo)
 import Garden.Runtime (runGarden)
 import System.Directory (createDirectoryIfMissing, doesFileExist, setCurrentDirectory)
+import System.Exit (exitFailure)
 import System.Environment (getExecutablePath)
 import System.FilePath (takeDirectory, (</>))
-import System.IO (BufferMode (LineBuffering), IOMode (AppendMode), hSetBuffering, stderr, stdout, withFile)
+import System.IO (BufferMode (LineBuffering), IOMode (AppendMode), hSetBuffering, hPutStrLn, stderr, stdout, withFile)
 
 main :: IO ()
 main = do
@@ -29,6 +30,9 @@ main = do
         hDuplicateTo logHandle stderr
       hSetBuffering stdout LineBuffering
       putStrLn banner
-  runGarden
+  result <- try runGarden :: IO (Either SomeException ())
+  case result of
+    Right () -> pure ()
+    Left problem -> hPutStrLn stderr (displayException problem) >> exitFailure
   where
     banner = "NOEMA / Garden of Afterlight - Windows edition"

@@ -449,3 +449,18 @@
  }
  
  // GLFW3: Called on file-drop over the window
+--- a/raylib/src/rlgl.h
++++ b/raylib/src/rlgl.h
+@@ -3433,6 +3433,12 @@
+     }
+ #endif
+ 
++#if defined(GRAPHICS_API_OPENGL_ES3)
++    // WebGL 2 / ES 3 require a sized depth texture format paired with its
++    // component type. The WebGL 1 unsized path is not valid here.
++    glInternalFormat = GL_DEPTH_COMPONENT24;
++#endif
++
+     if (!useRenderBuffer && RLGL.ExtSupported.texDepth)
+     {
+         glGenTextures(1, &id);

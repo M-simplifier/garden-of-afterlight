@@ -55,7 +55,7 @@ separate cache and output directories.
 
 `patches/h-raylib-web.patch` is applied to the verified archive in the cache.
 It corrects the wasm32 layouts of raylib structures and the bundled web focus
-callback. The native layout values remain unchanged. `checks/abi.c` asks the
+callback, and selects a sized DEPTH_COMPONENT24 attachment for WebGL 2. The native layout values remain unchanged. `checks/abi.c` asks the
 actual Emscripten compiler to verify 20 structures and 94 field offsets.
 
 The compiler supports Template Haskell. Selecting its installed `time`, `unix`
@@ -193,3 +193,21 @@ For a different game, replace the package/executable names, `BrowserMain.hs`
 connection, asset list, save paths and game-specific input settings. Keep the
 ABI patch, linker, memory guard and FFI bridge together. The shared low-level
 host contracts and focused JavaScript tests are documented in [host/README.md](host/README.md).
+
+## Rendering preferences and pointer-free verification
+
+The quality menu selects a complete render preset. The optional details panel
+independently overrides resolution, shadows, clouds, contact occlusion and bloom.
+Choices persist locally; choosing “match quality” removes an override. These
+settings never enter a checkpoint or modify semantic ticks.
+
+Preview and resize callbacks render the same Haskell scene without consuming
+input. Quality can be checked before clicking Play, with no pointer lock.
+`?diagnostics=1` exposes diagnostic DOM data, including HDR capability; optional
+`?render-check=1` samples the paused preview. CPU submission/present and animation
+frame intervals are not GPU timer-query measurements or gameplay benchmarks.
+
+Shaders are read from this repository's `assets/shaders/`, then translated to
+GLSL ES 300. `--assets` supplies fonts and audio. Half-float color rendering is
+enabled after the WebGL context exists, and the backend checks framebuffer
+completeness before publishing allocations. See [rendering notes](../docs/rendering.md).

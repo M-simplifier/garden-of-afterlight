@@ -57,6 +57,10 @@ apply (between before after) before == after
 | [Clock](src/Garden/Clock.hs) | 経過時間と短い入力を失わない固定刻み |
 | [Checkpoint](src/Garden/Checkpoint.hs) | 保存対象を明記したSnapshotと地形差分 |
 | [Render.Invalidation](src/Garden/Render/Invalidation.hs) | 世界の編集履歴から描画キャッシュの更新範囲を導く |
+| [Render.Settings](src/Garden/Render/Settings.hs) | 画質と個別設定から描画計画・確保するバッファ・処理量を純粋に決める |
+| [Render.Chunk](src/Garden/Render/Chunk.hs) | 描画用の地形分割と、広角を含む保守的な可視判定 |
+| [Render.Radiance](src/Garden/Render/Radiance.hs) | 描画計画をGPUで実行する。ゲーム状態の更新や入力を扱わない |
+| [Host.Control](src/Garden/Host/Control.hs) | 入力を使うプレイと、入力を扱わない検証を区別する |
 | [Photo](src/Garden/Photo.hs) | ゲーム状態から独立した撮影カメラ |
 | [Mesh](src/Garden/Mesh.hs) | セルから表示用のボクセル形状を組み立てる純粋関数 |
 | [GardenCheck](tools/GardenCheck.hs) | 法則、保存互換性、衝突、物語と四島への移動を検査 |
@@ -75,7 +79,7 @@ cabal run noema-garden-check
 ```
 
 既定では描画・音声ライブラリを必要とするWindowsホストをビルドしません。
-検査は550件の生成ケースに加え、通常のゲーム入力で物語を完了し、四島に着地して建築します。
+検査は800件の生成ケースに加え、通常のゲーム入力で物語を完了し、四島に着地して建築します。
 これはOSのキー入力や人間によるプレイテストとは別の検査です。
 `tools/fixtures/garden-v3.txt` は旧エンコーダーで生成した互換性検査用の二編集の庭で、個人のプレイ記録ではありません。
 
@@ -90,15 +94,43 @@ Linux / WSLでの[ビルド手順](web/README.md)と、[再利用する際の判
 ダウンロードを受け持ちます。ゲームのルール・保存形式・固定tickをJavaScriptで書き直しません。
 起動には以下の非同梱アセットが必要です。
 
+## 描画と負荷の切り替え
+
+HDRの光、二段階の動的な影、立体的な雲、接地陰影、縮小バッファでのブルームを使います。
+Windows版は **F4**、ブラウザ版は画質メニューで「高画質・標準・軽量」を切り替えます。
+ブラウザの「描画の調整」では、解像度・影・雲・接地陰影・光のにじみを個別に上書きできます。
+文字やメニューは描画解像度を下げても元の解像度を保ちます。
+
+[描画設計と検証結果](docs/rendering.md)に、各設定の処理量、ネイティブ環境変数、性能測定の条件をまとめています。
+シェーダーはこのrepo内のコードを使い、ブラウザビルド時にも外部アセットの古いシェーダーで置き換えません。
+
+## マウスを捕捉せずに確認する
+
+`GARDEN_INPUT=observe` で非表示・入力なしのネイティブ起動になります。
+フレーム数を指定する検証、スクリーンショット、巡回テストも既定でこのモードです。
+このモードは最初の庭から始まり、既存セーブの読み書きと音の再生を行いません。
+
+```powershell
+cabal build noema-garden noema-render-check -fnative
+$exe = cabal list-bin noema-garden -fnative
+./tools/Observe-Garden.ps1 -Executable $exe -Quality high -Frames 360
+cabal run noema-render-check -fnative
+```
+
+`Observe-Garden.ps1`は子プロセスだけに設定を渡し、画面と計測を`.runtime/observe-*`へ残します。
+`noema-render-check`は昼夜、各画質、個別効果、縦長画面、広角・望遠・傾き、繰り返し切り替えを
+実際の描画経路で実行し、`.runtime/render-check/`へ保存します。
+ブラウザでは「クリックして庭へ」を押す前のプレビューで、マウス捕捉なしに画質を確認できます。
+
 ## 公開範囲
 
-Haskellコード、Cabal設定、検査用データ、ブラウザ出力のコード・ツール、実装スキルを公開しています。
-作品の画像、フォント、音源、シェーダー、実行ファイル、個人のセーブ、企画書は含みません。
+Haskellコード、GLSLシェーダー、Cabal設定、検査用データ、ブラウザ出力のコード・ツール、実装スキルを公開しています。
+作品の画像、フォント、音源、実行ファイル、個人のセーブ、企画書は含みません。
 ブラウザ互換用の小さなscreen vertex shaderはビルドツールに含みます。
 Haskellで記述した地形・モデル・音声の生成処理はコードの一部として含みます。
 
 Windowsホストも `cabal build noema-garden -fnative` でビルド対象にできます。
-ただし起動には非同梱の `assets/shaders/`、`assets/fonts/`、`assets/garden-audio/` が必要です。
+ただし起動には非同梱の `assets/fonts/`、`assets/garden-audio/` が必要です。
 このリポジトリ単体はゲームの配布パッケージではありません。
 
 ## License

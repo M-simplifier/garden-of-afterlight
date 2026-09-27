@@ -34,7 +34,8 @@
 - `Change`の結合・単位・適用・差分の法則が、地形編集と保存で使われている。
   抽象化を読む小さい入口になる。セル型と素材型は作品固有。
 - 公開版はアセットなしで`cabal run noema-garden-check`を実行できる構成。
-  作品のshader・font・音源等は別途必要。ブラウザ互換用のscreen vertex shaderのみ同梱。
+  上記の固定版では作品のshader・font・音源等は別途必要で、screen vertex shaderのみ同梱。
+  現在のcheckoutの同梱範囲はREADMEを確認する（描画更新では作品のshaderも公開対象）。
   ゲーム起動用の完成パッケージではない。
 - ゲーム進行全体は純粋遷移。Yampaは光の余韻に使用する。
   多主体の競合、rollback通信、汎用剛体エンジンの実装例ではない。

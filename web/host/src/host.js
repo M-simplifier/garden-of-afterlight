@@ -20,6 +20,20 @@ const fullscreenButton = document.querySelector('#fullscreen');
 const quality = document.querySelector('#quality');
 const qualityKey = 'afterlight:render-scale:v1';
 try { quality.value = String(renderScale(localStorage.getItem(qualityKey))); } catch { /* Preferences are optional. */ }
+const renderOptions = [...document.querySelectorAll('[data-render-option]')];
+const optionsKey = 'afterlight:render-options:v1';
+try {
+  const saved = JSON.parse(localStorage.getItem(optionsKey) || '{}');
+  for (const option of renderOptions) if ([...option.options].some(entry => entry.value === saved[option.dataset.renderOption]))
+    option.value = saved[option.dataset.renderOption];
+} catch { /* An invalid preference never prevents startup. */ }
+function applyRenderPreferences() {
+  instance.exports.setQuality(state, Math.round(100 * renderScale(quality.value)));
+  for (const option of renderOptions) if (option.value !== '-1') {
+    if (!instance.exports.setRenderOption(state, Number(option.dataset.renderOption), Number(option.value)))
+      throw new Error('Invalid render preference');
+  }
+}
 const renderCheck = createRenderCheck(new URLSearchParams(location.search).get('render-check') === '1');
 const captureMessage = document.querySelector('#capture-message');
 const downloadPhoto = photoDownload(document.querySelector("#photo-download"));
@@ -72,7 +86,7 @@ function publishDiagnostics() {
     renderCheck: renderCheck?.snapshot(),
     paints: performance.getEntriesByType('paint').map(({ name, startTime }) => ({ name, startTime })),
     raylibBreak: inspection.raylibBreak, layout: inspection.layout,
-    environment: inspection.environment, assets: inspection.assets,
+    renderCapabilities: inspection.renderCapabilities, environment: inspection.environment, assets: inspection.assets,
     persistence: inspection.persistence, photo: inspection.photo,
     focus: focusState(), focusEvents, input: input?.snapshot(),
     stats: { ...stats, averageFrameMs: stats.frames ? stats.totalFrameMs / stats.frames : 0,
@@ -185,7 +199,7 @@ function frame(at) {
     if (resizePending || qualityPending || displayPixelRatio !== window.devicePixelRatio) {
       let redraw = qualityPending;
       if (qualityPending) {
-        instance.exports.setQuality(state, Math.round(100 * renderScale(quality.value)));
+        applyRenderPreferences();
         refreshRaylibMemory(memory, raylib);
         qualityPending = false;
       }
@@ -250,7 +264,7 @@ function prepare() {
     detail.textContent = stage === 3 ? `${done.toLocaleString()} / ${total.toLocaleString()}` : 'そのまま、少しお待ちください';
     const began = performance.now();
     // Select the scene target before warmup. Canvas/UI remain at display density.
-    if (stage === 4) instance.exports.setQuality(state, Math.round(100 * renderScale(quality.value)));
+    if (stage === 4) applyRenderPreferences();
     state = instance.exports.mainLoop(state);
     refreshRaylibMemory(memory, raylib);
     const elapsed = performance.now() - began;
@@ -341,8 +355,15 @@ async function load() {
     env: raylibImports(memory, raylib, {
       countCall: () => { stats.ffiCalls++; },
       freeHaskell: pointer => instance.exports.free(pointer), raylibLimit: RAYLIB_LIMIT,
-      invoke: (name, fn, args) => name === '_TakeScreenshot_'
-        ? screenshots(name, fn, args) : input.invoke(name, fn, args),
+      invoke: (name, fn, args) => {
+        const result = name === '_TakeScreenshot_' ? screenshots(name, fn, args) : input.invoke(name, fn, args);
+        if (name === '_InitWindow_') {
+          const gl = canvas.getContext('webgl2');
+          const halfFloat = !!(gl.getExtension('EXT_color_buffer_float') || gl.getExtension('EXT_color_buffer_half_float'));
+          inspection.renderCapabilities = { halfFloat };
+        }
+        return result;
+      },
     }),
   });
   inspection.layout = checkPartition();
@@ -403,6 +424,11 @@ enter.addEventListener('click', event => input.engage(event));
 quality.addEventListener('change', () => {
   qualityPending = true;
   try { localStorage.setItem(qualityKey, quality.value); } catch { /* Keep the choice for this visit. */ }
+});
+for (const option of renderOptions) option.addEventListener('change', () => {
+  qualityPending = true;
+  try { localStorage.setItem(optionsKey, JSON.stringify(Object.fromEntries(renderOptions.map(item => [item.dataset.renderOption, item.value])))); }
+  catch { /* Keep the choice for this visit. */ }
 });
 fullscreenButton.addEventListener('click', () => input.fullscreen());
 document.addEventListener('fullscreenchange', () => {
