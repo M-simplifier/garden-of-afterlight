@@ -5,6 +5,13 @@
 !LICENSE
 !cabal.project
 !garden-of-afterlight.cabal
+!assets/
+!assets/shaders/
+!assets/shaders/*.vs
+!assets/shaders/*.fs
+!docs/
+!docs/*.md
+!tools/*.ps1
 !src/
 !src/**/
 !src/**/*.hs

@@ -8,6 +8,9 @@ import FRP.Yampa (embed)
 import Garden.Change qualified as Change
 import Garden.Checkpoint
 import Garden.Clock
+import Garden.Host.Control
+import Garden.Render.Settings
+import Garden.Render.Chunk
 import Garden.Islands (islandHarbours)
 import Garden.Mesh (ornamentGeometry, terrainGeometry)
 import Garden.Photo
@@ -24,6 +27,22 @@ import Test.QuickCheck hiding (label, scale)
 
 main :: IO ()
 main = do
+  check "observers cannot capture the pointer, including focus/photo transitions" $
+    and [not (wantsPointer ObserveOnly focused paused photo) | focused <- [False,True], paused <- [False,True], photo <- [False,True]]
+  check "unfocused interactive photo mode releases the pointer" $ not (wantsPointer Interactive False False True)
+  check "bounded native runs observe by default; explicit input is validated" $
+    controlMode Nothing True == Right ObserveOnly && controlMode (Just "interactive") True == Right Interactive
+      && case controlMode (Just "typo") False of Left _ -> True; Right _ -> False
+  check "disabled post effects allocate no targets" $
+    let p = renderPlan (1367,769) (preset LightQuality) in shadowSize p == Nothing && effectsSize p == Nothing && bloomSize p == Nothing
+  check "custom settings override one effect without resetting the chosen scale" $
+    fmap resolutionPercent (parseSettings [("quality","balanced"),("clouds","off")]) == Right 75
+  check "chunk partition covers negative coordinates without overlap" $
+    all (\c -> c `elem` chunkCells (chunkOf c)) [Cell x y z | x <- [-17..17], y <- [-9,0,9], z <- [-17..17]]
+  check "wide-angle frustum retains a grazing chunk" $
+    visibleChunk (V3 0 4 0) (V3 0 0 1) (V3 1 0 0) (V3 0 1 0) 1.2 2 (5,0,1)
+  plans <- quickCheckWithResult stdArgs {maxSuccess = 250} renderPlanBounds
+  unless (isSuccess plans) exitFailure
   legacy <- readFile "tools/fixtures/garden-v3.txt"
   check "frozen v3 save migrates and survives v4 resaving" $ case decode legacy of
     Right loaded -> normal loaded == normal editedGarden && decode (encode loaded) == Right loaded
@@ -295,3 +314,13 @@ runJourney n w previous
       unless (stage == previous) (putStrLn ("Journey " <> show n <> " " <> stage))
       let next = fst (advance (tourInput w) w)
       runJourney (n + 1) next stage
+
+-- Extreme/minimized/odd viewports cannot create zero-size or unbounded GPU
+-- allocations; the shader sees the same rounded dimensions as its attachment.
+renderPlanBounds :: Int -> Int -> Int -> Property
+renderPlanBounds w h percent = conjoin
+  [ let plan = renderPlan (w,h) ((preset quality) {resolutionPercent = percent})
+        sizes = [sceneSize plan, skySize plan] <> maybe [] (:[]) (effectsSize plan) <> maybe [] (:[]) (bloomSize plan)
+     in counterexample (show plan) (all (\(x,y) -> x>0 && y>0 && x<=4096 && y<=4096) sizes)
+  | quality <- [FullQuality, BalancedQuality, LightQuality]
+  ]

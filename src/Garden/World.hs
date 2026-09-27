@@ -1,6 +1,6 @@
 {-# LANGUAGE StrictData #-}
 
-module Garden.World (initialWorld, restartWorld, landscape, heightAt, solid, occupied, bodyCells, bodyClear, groundBelow, chunkOf, editCell) where
+module Garden.World (initialWorld, restartWorld, landscape, heightAt, solid, occupied, bodyCells, bodyClear, groundBelow, editCell) where
 
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as M
@@ -184,9 +184,6 @@ groundBelow cells (V3 x y z) = go (min 90 (floor y))
       | a < (-64) = -66
       | occupied cells (Cell (floor x) a (floor z)) = fromIntegral (a + 1)
       | otherwise = go (a - 1)
-
-chunkOf :: Cell -> Chunk
-chunkOf (Cell x y z) = (x `div` 4, y `div` 8, z `div` 4)
 
 -- A new journey restores the garden without rewinding its edit sequence.
 -- Observers may still be looking at any earlier revision.

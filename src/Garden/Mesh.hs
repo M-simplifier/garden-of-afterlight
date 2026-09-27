@@ -7,7 +7,9 @@ import Garden.Types
 
 data RGB = RGB !Float !Float !Float deriving (Eq, Show)
 
-data Vertex = Vertex !V3 !V3 !RGB !Float deriving (Eq, Show)
+-- Albedo, emission, ambient visibility and surface class remain independent.
+-- Lighting is evaluated by the renderer, never baked into pigment.
+data Vertex = Vertex !V3 !V3 !RGB !Float !Float !Float deriving (Eq, Show)
 
 type Geometry = [Vertex]
 
@@ -43,22 +45,15 @@ cellGeometry cells entries = concatMap drawCell entries
       where
         faceGeometry origin material (Face delta normal corners)
           | maybe False (/= Luminous) (M.lookup (cellAdd origin delta) cells) = []
-          | otherwise = triangulate [Vertex (plus (V3 (fromIntegral x) (fromIntegral y) (fromIntegral z)) corner) normal (colorScale (variation * shade corner normal) (palette material)) (emission material) | corner <- corners]
+          | otherwise = triangulate [Vertex (plus (V3 (fromIntegral x) (fromIntegral y) (fromIntegral z)) corner) normal (colorScale variation (palette material)) (emission material) (ambientOcclusion cells c corner normal) (surface material) | corner <- corners]
         variation = 0.94 + fromIntegral (abs (x * 71 + y * 29 + z * 97) `mod` 13) * 0.009
-        shade corner normal = ambientOcclusion cells c corner normal * sunlight
-        -- A deterministic directional visibility field is baked only at mesh
-        -- mutation boundaries. It never changes collision or semantic state.
-        sunlight = if emission m > 0.1 then 1 else sunVisibility cells c
 
-sunVisibility :: M.Map Cell Material -> Cell -> Float
-sunVisibility cells c
-  | any blocked [1 .. 40 :: Int] = 0.56
-  | otherwise = 1
-  where
-    p = plus (center c) (V3 (-0.36) 0.53 (-0.23))
-    blocked i =
-      let q = cellOf (plus p (scale (fromIntegral i) (V3 (-0.67) 1 (-0.43))))
-       in q /= c && maybe False (/= Water) (M.lookup q cells)
+surface :: Material -> Float
+surface Gold = 1
+surface Water = 2
+surface Leaves = 3
+surface Moss = 3
+surface _ = 0
 
 terrainGeometry :: M.Map Cell Material -> [(Cell, Material)] -> Geometry
 terrainGeometry cells entries =
@@ -218,17 +213,17 @@ relicGeometry = cellGeometry cells (M.toList cells)
       ]
 
 translateGeometry :: V3 -> Geometry -> Geometry
-translateGeometry delta = map (\(Vertex p n c e) -> Vertex (plus p delta) n c e)
+translateGeometry delta = map (\(Vertex p n c e a m) -> Vertex (plus p delta) n c e a m)
 
 scaleGeometry :: Float -> Geometry -> Geometry
-scaleGeometry s = map (\(Vertex p n c e) -> Vertex (scale s p) n c e)
+scaleGeometry s = map (\(Vertex p n c e a m) -> Vertex (scale s p) n c e a m)
 
 -- Surface ornaments inherit the owning block: removing it removes its growth.
 -- Fine voxels are visual detail on a metre-scale editable terrain cell.
 ornamentGeometry :: M.Map Cell Material -> [(Cell, Material)] -> Geometry
 ornamentGeometry cells = concatMap ornament
   where
-    ornament (c@(Cell x y z), m)
+    ornament (Cell x y z, m)
       | m == Moss && h `mod` 4 == 0 =
           onSurface $ concat
             [ let a = fromIntegral branch * 2.094 + fromIntegral (h `mod` 7)
@@ -254,15 +249,14 @@ ornamentGeometry cells = concatMap ornament
         base = V3 (fromIntegral x) (fromIntegral y) (fromIntegral z)
         -- Probe neighbours only after a cell qualifies for an ornament.
         onSurface geometry = if M.member (Cell x (y + 1) z) cells then [] else geometry
-        shade = sunVisibility cells c
         cube offset (V3 sx sy sz) color glow =
           concat
             [ triangulate
                 [ Vertex
                     (plus (plus base offset) (V3 (a * sx) (b * sy) (d * sz)))
                     normal
-                    (colorScale shade color)
-                    glow
+                    color
+                    glow 1 3
                 | V3 a b d <- corners
                 ]
             | Face _ normal corners <- faces

@@ -94,12 +94,13 @@ def compress_site(output: Path, paths: list[str]) -> None:
 
 
 def prepare(source: Path, output: Path) -> None:
-    files = ["shaders/voxel.vs", "shaders/voxel.fs", "shaders/sky.fs", "shaders/post.fs",
-             "fonts/glyphs.txt", FONT, "fonts/LICENSE-NotoSansCJK.txt"]
+    repo = Path(__file__).resolve().parents[1]
+    shaders = sorted((repo / "assets/shaders").glob("*.vs")) + sorted((repo / "assets/shaders").glob("*.fs"))
+    files = ["shaders/" + path.name for path in shaders] + ["fonts/glyphs.txt", FONT, "fonts/LICENSE-NotoSansCJK.txt"]
     sounds = ["day", "night", "Mine", "Build", "Jewel", "Offering", "Wound",
               "Jump", "Strike", "Dusk", "Wings", "Return", "Dash"]
     files += [f"garden-audio/{name}.wav" for name in sounds]
-    missing = [name for name in files if not (source / name).is_file()]
+    missing = [name for name in files if not ((repo / "assets" if name.startswith("shaders/") else source) / name).is_file()]
     if missing:
         raise SystemExit("Missing runtime assets: " + ", ".join(missing))
     codepoints = font_codepoints(source, Path(__file__).resolve().parents[1])
@@ -108,7 +109,7 @@ def prepare(source: Path, output: Path) -> None:
         target = output / "assets" / name
         target.parent.mkdir(parents=True, exist_ok=True)
         if name.startswith("shaders/"):
-            text = (source / name).read_text(encoding="utf-8")
+            text = (repo / "assets" / name).read_text(encoding="utf-8-sig")
             if not text.startswith("#version 330"):
                 raise SystemExit(f"Expected GLSL 330 in {name}")
             text = text.replace("#version 330", "#version 300 es\nprecision highp float;\nprecision highp int;", 1)

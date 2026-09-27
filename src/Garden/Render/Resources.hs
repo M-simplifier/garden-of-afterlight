@@ -13,7 +13,6 @@ module Garden.Render.Resources
     stepChunkLoading,
     chunkLoadingProgress,
     syncChunks,
-    renderTarget,
     drawPrepared,
     drawRelic,
     withShader,
@@ -25,7 +24,7 @@ module Garden.Render.Resources
   )
 where
 
-import Control.Exception (bracket, bracket_, bracketOnError, evaluate, finally, mask, mask_, onException)
+import Control.Exception (bracket, bracketOnError, evaluate, finally, mask, mask_, onException)
 import Control.Monad (forM_, unless)
 import Data.Char (ord)
 import Data.IORef
@@ -35,10 +34,15 @@ import Foreign (Ptr, castPtr, free, malloc, peek, poke, with, withArrayLen)
 import Foreign.C.String (withCString)
 import Foreign.C.Types (CInt)
 import Garden.Mesh
+import Garden.Render.GPU (loadCheckedShader, withShader)
+import Garden.Render.Radiance (Radiance, acquireRadiance, releaseRadiance)
+import Garden.Render.Settings
+import System.Environment (lookupEnv)
+import Data.Maybe (catMaybes)
 import Garden.Render.Invalidation (changedSince)
 import Garden.Types (Cell (..), Chunk, Gem (..), Material (..), Threat (..), V3 (..), center)
 import Garden.View (SceneView (..), uiCorpus)
-import Garden.World (chunkOf)
+import Garden.Render.Chunk
 import Raylib.Core
 import Raylib.Core.Models
 import Raylib.Core.Text
@@ -53,20 +57,15 @@ data PreparedModel = PreparedModel !Model !(Ptr Model)
 
 data PreparedFont = PreparedFont !Font !(Ptr Font)
 
-data RenderQuality = FullQuality | BalancedQuality | LightQuality
-  deriving (Eq)
-
 data Resources = Resources
   { resourceWindow :: WindowResources,
     resourceShader :: Shader,
-    resourceSky :: Shader,
-    resourcePost :: Shader,
+    resourceRadiance :: Radiance,
     resourceFont :: PreparedFont,
     resourceChunks :: IORef (Int, M.Map Chunk [PreparedModel]),
     resourceKin :: M.Map Gem [PreparedModel],
     resourceEnemy :: M.Map Threat [PreparedModel],
-    resourceTarget :: IORef (Int, Int, RenderTexture),
-    resourceQuality :: IORef RenderQuality,
+    resourceQuality :: IORef RenderSettings,
     resourceLights :: IORef [V3],
     resourceRelic :: [PreparedModel]
   }
@@ -83,21 +82,13 @@ acquireResources window = mask_ $ do
         value <- action
         modifyIORef' cleanupRef (release value :)
         pure value
-      shader action = own (managed window action) (`unloadShader` window)
       geometry worldShader shape = own (prepareGeometry window worldShader shape) (releaseModels window)
   ( do
-      worldShader <- shader (loadShader (Just "assets/shaders/voxel.vs") (Just "assets/shaders/voxel.fs"))
-#if defined(wasm32_HOST_ARCH)
-      -- raylib's default screen vertex shader is ES 100, even on WebGL 2.
-      let screenVertex = Just "assets/shaders/screen.vs"
-#else
-      let screenVertex = Nothing
-#endif
-      skyShader <- shader (loadShader screenVertex (Just "assets/shaders/sky.fs"))
-      postShader <- shader (loadShader screenVertex (Just "assets/shaders/post.fs"))
-      mapM_ (\s -> isShaderValid s >>= \ok -> unless ok (fail "A garden shader did not compile")) [worldShader, skyShader, postShader]
+      worldShader <- own (loadCheckedShader window (Just "assets/shaders/voxel.vs") "assets/shaders/voxel.fs") (`unloadShader` window)
+      radiance <- own (acquireRadiance window) releaseRadiance
       glyphs <- readFile "assets/fonts/glyphs.txt"
-      let codepoints = S.toAscList (S.fromList ([32 .. 126] <> filter (>= 32) (map ord (glyphs <> uiCorpus))))
+      let labels = glyphs <> uiCorpus <> concatMap qualityName [minBound .. maxBound]
+          codepoints = S.toAscList (S.fromList ([32 .. 126] <> filter (>= 32) (map ord labels)))
       font <- own (managed window (loadFontEx "assets/fonts/NotoSansCJKjp-Regular.otf" 48 (Just codepoints))) (`unloadFont` window)
       validFont <- isFontValid font
       unless validFont (fail "The Japanese font could not be loaded")
@@ -106,30 +97,25 @@ acquireResources window = mask_ $ do
       chunks <- newIORef (-1, M.empty)
       kin <- traverse (geometry worldShader . kinSculpture) (M.fromList [(g, g) | g <- [Jade, Rose, Azure, Honey]])
       enemy <- traverse (geometry worldShader . enemySculpture) (M.fromList [(k, k) | k <- [Wanderer .. SkyMoth]])
-      w <- getScreenWidth
-      h <- getScreenHeight
-      target <- own (loadRenderTexture w h) (`unloadRenderTexture` window)
-      _ <- setTextureFilter (renderTexture'texture target) TextureFilterBilinear
-      targetRef <- newIORef (w, h, target)
-      quality <- newIORef FullQuality
+      overrides <- mapM (\(key, env) -> fmap ((key,) <$>) (lookupEnv env))
+        [("quality","GARDEN_QUALITY"),("scale","GARDEN_SCALE"),("shadows","GARDEN_SHADOWS"),("clouds","GARDEN_CLOUDS"),("ao","GARDEN_AO"),("bloom","GARDEN_BLOOM")]
+      settings <- either (ioError . userError) pure (parseSettings (catMaybes overrides))
+      quality <- newIORef settings
       lights <- newIORef []
       relic <- geometry worldShader relicGeometry
-      pure (Resources window worldShader skyShader postShader preparedFont chunks kin enemy targetRef quality lights relic)
+      pure (Resources window worldShader radiance preparedFont chunks kin enemy quality lights relic)
     ) `onException` (readIORef cleanupRef >>= releaseAll)
 
 releaseResources :: Resources -> IO ()
 releaseResources resources = mask_ $ do
   (_, chunks) <- readIORef (resourceChunks resources)
-  (_, _, target) <- readIORef (resourceTarget resources)
   let window = resourceWindow resources
       PreparedFont font _ = resourceFont resources
   releaseAll
     [ releaseModels window (concat (M.elems chunks <> M.elems (resourceKin resources) <> M.elems (resourceEnemy resources) <> [resourceRelic resources])),
       releaseFontBorrow (resourceFont resources),
       unloadFont font window,
-      unloadRenderTexture target window,
-      unloadShader (resourcePost resources) window,
-      unloadShader (resourceSky resources) window,
+      releaseRadiance (resourceRadiance resources),
       unloadShader (resourceShader resources) window
     ]
 
@@ -161,12 +147,12 @@ prepareModel window shader geometry = mask_ $ do
         Mesh
           { mesh'vertexCount = length geometry,
             mesh'triangleCount = length geometry `div` 3,
-            mesh'vertices = [toRay p | Vertex p _ _ _ <- geometry],
-            mesh'texcoords = Nothing,
+            mesh'vertices = [toRay p | Vertex p _ _ _ _ _ <- geometry],
+            mesh'texcoords = Just [Vector2 emissionValue surfaceClass | Vertex _ _ _ emissionValue _ surfaceClass <- geometry],
             mesh'texcoords2 = Nothing,
-            mesh'normals = [toRay n | Vertex _ n _ _ <- geometry],
+            mesh'normals = [toRay n | Vertex _ n _ _ _ _ <- geometry],
             mesh'tangents = Nothing,
-            mesh'colors = Just [toColor c emissionValue | Vertex _ _ c emissionValue <- geometry],
+            mesh'colors = Just [toColor c ambient | Vertex _ _ c _ ambient _ <- geometry],
             mesh'indices = Nothing,
             mesh'animVertices = Nothing,
             mesh'animNormals = Nothing,
@@ -206,6 +192,7 @@ prepareModel window shader geometry = mask_ $ do
                 { mesh'vertexCount = 0,
                   mesh'triangleCount = 0,
                   mesh'vertices = [],
+                  mesh'texcoords = Nothing,
                   mesh'normals = [],
                   mesh'colors = Nothing,
                   mesh'vaoId = vao,
@@ -229,15 +216,6 @@ drawRelic :: PreparedModel -> Float -> IO ()
 drawRelic (PreparedModel _ ptr) time =
   with (Vector3 0 62 54) $ \p -> with (Vector3 0 0 1) $ \axis -> with (Vector3 0.48 0.48 0.48) $ \s -> with (Color 255 255 255 255) $ \c ->
     c'drawModelEx ptr p axis (realToFrac (sin (time * 0.04) * 12)) s c
-
--- BeginShaderMode retains shader.locs until EndShaderMode flushes the batch.
--- h-raylib 5.6's shaderMode frees that array immediately after begin returns.
-withShader :: Shader -> IO a -> IO a
-withShader shader action =
-  bracket
-    (bracketOnError malloc free (\ptr -> poke ptr shader >> pure ptr))
-    (\ptr -> rlFreeDependents shader ptr `finally` free ptr)
-    (\ptr -> bracket_ (c'beginShaderMode ptr) endShaderMode action)
 
 textAt :: Resources -> String -> Float -> Float -> Float -> Color -> IO ()
 textAt resources text x y size color =
@@ -324,25 +302,7 @@ syncChunks resources view = mask $ \restore -> do
     window = resourceWindow resources
 
 chunkEntries :: Chunk -> M.Map Cell Material -> [(Cell, Material)]
-chunkEntries (cx, cy, cz) cells = [(c, m) | x <- [cx * 4 .. cx * 4 + 3], y <- [cy * 8 .. cy * 8 + 7], z <- [cz * 4 .. cz * 4 + 3], let c = Cell x y z, Just m <- [M.lookup c cells]]
-
-renderTarget :: Resources -> Int -> Int -> IO RenderTexture
-renderTarget resources screenWidth screenHeight = mask_ $ do
-  quality <- readIORef (resourceQuality resources)
-  -- Scale only the scene texture; window coordinates and UI retain full detail.
-  let percent = case quality of FullQuality -> 100; BalancedQuality -> 75; LightQuality -> 50
-      width = max 1 ((screenWidth * percent + 50) `div` 100)
-      height = max 1 ((screenHeight * percent + 50) `div` 100)
-  (w, h, old) <- readIORef (resourceTarget resources)
-  if (w, h) == (width, height)
-    then pure old
-    else do
-      fresh <- bracketOnError (loadRenderTexture width height) (`unloadRenderTexture` resourceWindow resources) $ \target -> do
-        _ <- setTextureFilter (renderTexture'texture target) TextureFilterBilinear
-        pure target
-      writeIORef (resourceTarget resources) (width, height, fresh)
-      unloadRenderTexture old (resourceWindow resources)
-      pure fresh
+chunkEntries key cells = [(c,m) | c <- chunkCells key, Just m <- [M.lookup c cells]]
 
 uniform :: Resources -> Shader -> String -> ShaderUniformData -> IO ()
 uniform resources shader name value = setShaderValue shader name value (resourceWindow resources)

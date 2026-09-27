@@ -1,14 +1,14 @@
 # Upstream patch
 
 `h-raylib-web.patch` modifies h-raylib 5.6.0.0's wasm32 structure layout and
-its bundled raylib web focus callback. It is a local modification, not an
+its bundled raylib web focus callback, and the GLES 3 depth-texture format. It is a local modification, not an
 upstream h-raylib or raylib release.
 
 The Haskell binding is by Anut and contributors, under Apache-2.0;
 see [the retained license](LICENSE-h-raylib.txt) and
 [the exact source package](https://hackage.haskell.org/package/h-raylib-5.6.0.0).
 
-The raylib change retains the following notice from `rcore_web.c`:
+The raylib changes retain the following notice from `rcore_web.c`:
 
 Copyright (c) 2013-2026 Ramon Santamaria (@raysan5) and contributors
 
@@ -24,3 +24,8 @@ applications, and to alter it and redistribute it freely, subject to the followi
 2. Altered source versions must be plainly marked as such, and must not be misrepresented
    as being the original software.
 3. This notice may not be removed or altered from any source distribution.
+
+The `rlgl.h` change uses `GL_DEPTH_COMPONENT24` with `GL_UNSIGNED_INT` in
+GLES 3 / WebGL 2. The older unsized WebGL 1 path caused incomplete framebuffers
+when the renderer began sampling scene depth. The desktop path is unchanged.
+Both the scene depth and depth-only shadow targets were exercised in WebGL 2.

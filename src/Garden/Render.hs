@@ -10,15 +10,17 @@ import Data.Map.Strict qualified as M
 import Garden.Mesh (palette)
 import Garden.Photo
 import Garden.Render.Resources
+import Garden.Render.Radiance
+import Garden.Render.Chunk
+import Garden.Render.Settings
 import Garden.Types
 import Garden.View
 import Raylib.Core
 import Raylib.Core.Models (drawCubeV, drawCubeWiresV)
 import Raylib.Core.Shapes
 import Raylib.Core.Text (drawText)
-import Raylib.Core.Textures (drawTexturePro)
 import Raylib.Types
-import Raylib.Util (blendMode, mode2D, mode3D, textureMode)
+import Raylib.Util (blendMode, mode2D)
 import Text.Printf (printf)
 
 cameraFor :: SceneView -> Camera3D
@@ -31,69 +33,42 @@ renderSceneWith :: Maybe Photo -> Resources -> SceneView -> Float -> IO ()
 renderSceneWith portrait resources view pulse = do
   width <- getScreenWidth
   height <- getScreenHeight
-  target <- renderTarget resources width height
-  let sceneWidth = texture'width (renderTexture'texture target)
-      sceneHeight = texture'height (renderTexture'texture target)
-      ws = resourceShader resources
-      ss = resourceSky resources
-      ps = resourcePost resources
+  settings <- readIORef (resourceQuality resources)
+  let ws = resourceShader resources
       f = sceneForward view
       fov = maybe 68 photoFov portrait
       lens = tan (fov * pi / 360)
       (right, upCorrect) = photoBasis (maybe 0 photoRoll portrait) f
       camera = Camera3D (toRay (sceneEye view)) (toRay (plus (sceneEye view) f)) (toRay upCorrect) fov CameraPerspective
-  uniform resources ws "eyePosition" (ShaderUniformVec3 (toRay (sceneEye view)))
-  uniform resources ws "veil" (ShaderUniformFloat (sceneVeil view))
-  uniform resources ws "time" (ShaderUniformFloat (sceneTime view))
+      grading = case portrait of
+        Nothing -> Vector3 0 0 1
+        Just p -> Vector3 (photoExposure p) (fromIntegral (fromEnum (photoGrade p))) (if photoBloom p then 1 else 0)
+      chosen = settings {bloom = bloom settings && maybe True photoBloom portrait}
+      visible = visibleChunk (sceneEye view) f right upCorrect lens (fromIntegral sceneWidth/fromIntegral sceneHeight)
+      (sceneWidth, sceneHeight) = sceneSize (renderPlan (width,height) chosen)
   lamps <- readIORef (resourceLights resources)
   let points = take 8 (sortOn (distance (sceneEye view)) lamps)
   uniform resources ws "lightCount" (ShaderUniformInt (length points))
   when (not (null points)) $
     setShaderValueV ws "lightPositions" (ShaderUniformVec3V (map toRay points)) (resourceWindow resources)
-  uniform resources ss "resolution" (ShaderUniformVec2 (Vector2 (fromIntegral sceneWidth) (fromIntegral sceneHeight)))
-  uniform resources ss "forwardView" (ShaderUniformVec3 (toRay f))
-  uniform resources ss "rightView" (ShaderUniformVec3 (toRay right))
-  uniform resources ss "upView" (ShaderUniformVec3 (toRay upCorrect))
-  uniform resources ss "lens" (ShaderUniformFloat lens)
-  uniform resources ss "time" (ShaderUniformFloat (sceneTime view))
-  uniform resources ss "veil" (ShaderUniformFloat (sceneVeil view))
-  textureMode target $ do
-    clearBackground (Color 110 160 166 255)
-    withShader ss (drawRectangle 0 0 sceneWidth sceneHeight white)
-    mode3D camera $ do
-      (_, chunks) <- readIORef (resourceChunks resources)
-      let visible (cx, cy, cz) =
-            let delta = minus (V3 (fromIntegral (cx * 4 + 2)) (fromIntegral (cy * 8 + 4)) (fromIntegral (cz * 4 + 2))) (sceneEye view)
-                depth = dot delta f
-                side = abs (dot delta right)
-                vertical = abs (dot delta upCorrect)
-             in depth > (-6) && depth < 420 && side < max 0 depth * lens * fromIntegral sceneWidth / fromIntegral sceneHeight + 8 && vertical < max 0 depth * lens + 8
-      forM_ (M.toList chunks) $ \(key, models) ->
-        when (visible key) $
+  (_, chunks) <- readIORef (resourceChunks resources)
+  let opaque isShadow accepts = do
+        forM_ (M.toList chunks) $ \(key, models) -> when (accepts key) $
           forM_ models (\m -> drawPrepared m (V3 0 0 0) 0 1 white)
-      forM_ (resourceRelic resources) (\m -> drawRelic m (sceneTime view))
-      drawKin resources view
-      drawEnemies resources view
-      drawAtmosphere view
-      drawBursts view
-      case sceneTarget view of
-        TerrainTarget c _ (Ore g) _ -> drawCubeWiresV (toRay (center c)) (Vector3 1.014 1.014 1.014) (toColor (palette (Ore g)) 0.82)
-        TerrainTarget c _ _ _ -> drawCubeWiresV (toRay (center c)) (Vector3 1.012 1.012 1.012) (Color 232 224 167 150)
-        _ -> pure ()
-  uniform resources ps "resolution" (ShaderUniformVec2 (Vector2 (fromIntegral sceneWidth) (fromIntegral sceneHeight)))
-  let grading = case portrait of
-        Nothing -> Vector3 0 0 1
-        Just p -> Vector3 (photoExposure p) (fromIntegral (fromEnum (photoGrade p))) (if photoBloom p then 1 else 0)
-  uniform resources ps "grading" (ShaderUniformVec3 grading)
-  uniform resources ps "vignette" (ShaderUniformFloat (if maybe True photoVignette portrait then 0.12 else 0))
-  withShader ps $
-    drawTexturePro
-      (renderTexture'texture target)
-      (Rectangle 0 0 (fromIntegral sceneWidth) (negate (fromIntegral sceneHeight)))
-      (Rectangle 0 0 (fromIntegral width) (fromIntegral height))
-      (Vector2 0 0)
-      0
-      white
+        forM_ (resourceRelic resources) (\m -> drawRelic m (sceneTime view))
+        drawKin isShadow resources view
+        drawEnemies isShadow resources view
+      shadow camera' = opaque True (shadowVisible chunkRadius camera' . toRay . chunkCenter)
+      scene = do
+        opaque False visible
+        drawAtmosphere view
+        drawBursts view
+        case sceneTarget view of
+          TerrainTarget c _ (Ore g) _ -> drawCubeWiresV (toRay (center c)) (Vector3 1.014 1.014 1.014) (toColor (palette (Ore g)) 0.82)
+          TerrainTarget c _ _ _ -> drawCubeWiresV (toRay (center c)) (Vector3 1.012 1.012 1.012) (Color 232 224 167 150)
+          _ -> pure ()
+  renderRadiance (resourceRadiance resources) chosen ws camera (sceneTime view) (sceneVeil view) grading
+    (if maybe True photoVignette portrait then 0.10 else 0) shadow scene
   when (pulse > 0.04) $ drawRectangleGradientV 0 0 width height (Color 113 233 192 (round (pulse * 13))) (Color 243 223 148 0)
   forM_ [b | b <- sceneBursts view, burstCue b == Return] $ \b -> do
     let age = sceneTime view - fromIntegral (unTick (burstBorn b)) / 60
@@ -111,28 +86,28 @@ renderSceneWith portrait resources view pulse = do
         (Color 190 34 65 (round (opacity * 110)))
         (Color 190 34 65 0)
 
-drawKin :: Resources -> SceneView -> IO ()
-drawKin resources view = forM_ (sceneKin view) $ \(KinView pos gem bond safe) -> do
+drawKin :: Bool -> Resources -> SceneView -> IO ()
+drawKin isShadow resources view = forM_ (sceneKin view) $ \(KinView pos gem bond safe) -> do
   let t = sceneTime view
       float = 0.12 * sin (t * 1.15 + fromIntegral (fromEnum gem))
       toward = minus (sceneEye view) pos
       V3 dx _ dz = toward
       yaw = atan2 (-dx) (-dz) * 180 / pi
   forM_ (M.findWithDefault [] gem (resourceKin resources)) $ \m -> drawPrepared m (plus pos (V3 0 (0.14 + float) 0)) yaw 0.13 white
-  blendMode BlendAdditive $ forM_ [0 .. 11 :: Int] $ \i -> do
+  when (not isShadow) $ blendMode BlendAdditive $ forM_ [0 .. 11 :: Int] $ \i -> do
     let a = fromIntegral i * pi / 6 + t * 0.32
         radius = if safe then 1.4 else 0.85
         p = plus pos (V3 (cos a * radius) (1.4 + float + sin (a * 2) * 0.16) (sin a * radius))
         s = if bond > 0 then 0.065 else 0.035
     drawCubeV (toRay p) (Vector3 s s s) (toColor (palette (Ore gem)) (if safe then 0.8 else 0.45))
 
-drawEnemies :: Resources -> SceneView -> IO ()
-drawEnemies resources view = forM_ (sceneEnemies view) $ \(EnemyView pos _ windup kind) -> do
+drawEnemies :: Bool -> Resources -> SceneView -> IO ()
+drawEnemies isShadow resources view = forM_ (sceneEnemies view) $ \(EnemyView pos _ windup kind) -> do
   let V3 dx _ dz = minus (sceneEye view) pos
       yaw = atan2 (-dx) (-dz) * 180 / pi
       shake = if windup > 0 then sin (sceneTime view * 40) * 0.08 else 0
   forM_ (M.findWithDefault [] kind (resourceEnemy resources)) $ \m -> drawPrepared m (plus pos (V3 shake 0 0)) yaw 0.14 white
-  when (windup > 0) $ blendMode BlendAdditive $ forM_ [0 .. 23 :: Int] $ \i -> do
+  when (not isShadow && windup > 0) $ blendMode BlendAdditive $ forM_ [0 .. 23 :: Int] $ \i -> do
     let a = fromIntegral i * pi / 12
         radius = case kind of Wanderer -> 2.9; Custodian -> 3.9; Skitter -> 2.4; SkyMoth -> 3.1
         alpha = 0.4 + 0.3 * sin (sceneTime view * 24)
@@ -180,6 +155,12 @@ renderInterface resources view debug fps = withUIScale $ \width height zoom -> d
       gold = Color 234 204 139 255
       label = textAt resources
   drawRectangleGradientV 0 0 width 130 (Color 7 20 25 178) (Color 7 20 25 0)
+  settings <- readIORef (resourceQuality resources)
+#if defined(wasm32_HOST_ARCH)
+  label (qualityName (renderQuality settings)) 210 26 14 soft
+#else
+  label ("F4  " <> qualityName (renderQuality settings)) 210 26 14 soft
+#endif
   label (regionName view) 32 20 32 ink
   drawLine 33 64 134 64 gold
   label (sceneObjective view) 32 77 22 ink

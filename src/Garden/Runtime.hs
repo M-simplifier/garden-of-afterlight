@@ -11,6 +11,7 @@ module Garden.Runtime
     previewGarden,
     setGardenActive,
     setGardenQuality,
+    setGardenRenderOption,
     startupGarden,
     stepGarden,
     shouldCloseGarden,
@@ -30,9 +31,11 @@ import Garden.Audio
 import Garden.Checkpoint
 import Garden.Clock
 import Garden.Input
+import Garden.Host.Control
 import Garden.Photo
 import Garden.Render
 import Garden.Render.Resources
+import Garden.Render.Settings
 import Garden.Rules
 import Garden.Signal
 import Garden.Tour qualified as Tour
@@ -60,7 +63,7 @@ data Timing = Timing !Int !Float !Double !Double !Double !Double !Double !Double
 data LightSignal = LightSignal !(ReactHandle [Cue] Float) !(IORef Float)
 
 -- Host resources and run options have one lifetime, separate from simulation.
-data Session = Session Resources AudioAssets LightSignal (IORef [Timing]) (Maybe Int) (Maybe Int) FilePath (Maybe String) (IORef Tour.Pilot)
+data Session = Session Resources AudioAssets LightSignal (IORef [Timing]) (Maybe Int) (Maybe Int) FilePath (Maybe String) (IORef Tour.Pilot) !ControlMode !(IORef Bool)
 
 data FrameState = FrameState !World !Clock !Host !Int !Double
 
@@ -71,7 +74,8 @@ data RunOptions = RunOptions
     optionShotName :: FilePath,
     optionTour :: Maybe String,
     optionPaused :: Bool,
-    optionHidden :: Bool
+    optionHidden :: Bool,
+    optionControl :: ControlMode
   }
 
 data Startup = Startup !WindowResources !AudioAssets !RunOptions !Double
@@ -130,13 +134,15 @@ beginGarden = do
 #endif
   pausedAtStart <- (== Just "1") <$> lookupEnv "GARDEN_PAUSED"
   hiddenAtStart <- (== Just "0") <$> lookupEnv "GARDEN_HUD"
-  let options = RunOptions scene frameLimit shotFrame shotName tour pausedAtStart hiddenAtStart
+  requestedControl <- lookupEnv "GARDEN_INPUT"
+  control <- either (ioError . userError) pure (controlMode requestedControl (any isJust [frameLimit, shotFrame] || isJust tour))
+  let options = RunOptions scene frameLimit shotFrame shotName tour pausedAtStart hiddenAtStart control
 #if defined(wasm32_HOST_ARCH)
   -- CSS fits this drawing buffer to the page; GLFW's window-resize callback
   -- otherwise replaces the requested resolution with the whole browser size.
   setConfigFlags [Msaa4xHint]
 #else
-  setConfigFlags [Msaa4xHint, WindowResizable]
+  setConfigFlags ([Msaa4xHint, WindowResizable] <> if control == ObserveOnly then [WindowHidden, WindowUnfocused, WindowAlwaysRun] else [])
 #endif
   bracketOnError (initWindow width height "NOEMA - Garden of Afterlight") (closeWindow . Just) $ \window -> do
 #if defined(wasm32_HOST_ARCH)
@@ -180,7 +186,7 @@ gardenReady (GardenApp stateRef) = do
 advancePreparation :: Preparation -> IO AppState
 advancePreparation (LoadWorld startup@(Startup _ _ options _)) = do
   began <- getTime
-  source <- loadSaved
+  source <- if optionControl options == ObserveOnly then pure initialWorld else loadSaved
   world <- evaluate (chooseScene (optionScene options) source)
   view <- evaluate (project world)
   reportStartup "world" began
@@ -207,20 +213,22 @@ advancePreparation (Warmup (Startup _ audio options began) resources world view)
   let warmupFrames = 6
 #endif
   replicateM_ warmupFrames $ do
-    updateAudio audio (worldVeil world) False
+    when (optionControl options == Interactive) (updateAudio audio (worldVeil world) False)
     drawing $ renderScene resources view 0 >> renderInterface resources view False 120
 #if !defined(wasm32_HOST_ARCH)
   performMajorGC
 #endif
-  if optionPaused options then enableCursor else disableCursor
-  _ <- getMouseDelta
+  pointer <- newIORef False
+  focused <- isWindowFocused
+  applyPointer (optionControl options) pointer (wantsPointer (optionControl options) focused (optionPaused options) False)
   start <- getTime
   timings <- newIORef []
   glow <- newIORef 0
   handle <- reactInit (pure []) (\_ _ value -> writeIORef glow value >> pure False) lightEnvelope
   let initialHost = Host (optionPaused options) (optionHidden options) False False Nothing 0 (eye (worldPlayer world)) Nothing Nothing 0
   pilot <- newIORef (Tour.Pilot 0 0)
-  let session = Session resources audio (LightSignal handle glow) timings (optionFrameLimit options) (optionShotFrame options) (optionShotName options) (optionTour options) pilot
+  let session = Session resources audio (LightSignal handle glow) timings (optionFrameLimit options) (optionShotFrame options) (optionShotName options) (optionTour options) pilot (optionControl options) pointer
+  putStrLn ("garden input=" <> show (optionControl options))
   reportStartup "preview" warmupBegan
   reportStartup "total" began
   pure (Running session (FrameState world emptyClock initialHost 0 start))
@@ -254,7 +262,7 @@ previewGarden :: GardenApp -> IO ()
 previewGarden (GardenApp stateRef) = do
   state <- readIORef stateRef
   case state of
-    Running (Session resources _ _ _ _ _ _ _ _) (FrameState world _ _ _ _) -> do
+    Running (Session resources _ _ _ _ _ _ _ _ _ _) (FrameState world _ _ _ _) -> do
       let view = project world
       drawing $ renderScene resources view 0 >> renderInterface resources view False 120
     _ -> pure ()
@@ -262,15 +270,25 @@ previewGarden (GardenApp stateRef) = do
 -- | Presentation-only preference. Apply after resource acquisition and before
 -- warmup to include it in the first preview; earlier calls are a no-op.
 setGardenQuality :: GardenApp -> RenderQuality -> IO ()
-setGardenQuality (GardenApp stateRef) quality = do
+setGardenQuality app quality = void (changeSettings app (const (Right (preset quality))))
+
+setGardenRenderOption :: GardenApp -> String -> String -> IO Bool
+setGardenRenderOption app key value = changeSettings app (setOption key value)
+
+changeSettings :: GardenApp -> (RenderSettings -> Either String RenderSettings) -> IO Bool
+changeSettings (GardenApp stateRef) change = do
   state <- readIORef stateRef
   case state of
     Loading (LoadChunks _ resources _ _ _ _) -> apply resources
     Loading (Warmup _ resources _ _) -> apply resources
-    Running (Session resources _ _ _ _ _ _ _ _) _ -> apply resources
-    _ -> pure ()
+    Running (Session resources _ _ _ _ _ _ _ _ _ _) _ -> apply resources
+    _ -> pure False
   where
-    apply resources = writeIORef (resourceQuality resources) quality
+    apply resources = do
+      previous <- readIORef (resourceQuality resources)
+      case change previous of
+        Left message -> putStrLn message >> pure False
+        Right settings -> writeIORef (resourceQuality resources) settings >> pure True
 
 -- | A browser activation changes only host control. Preserve the photo camera
 -- and world, and discard elapsed loading/background time before resuming.
@@ -279,8 +297,9 @@ setGardenActive (GardenApp stateRef) active = mask_ $ do
   state <- readIORef stateRef
   case state of
     Running session (FrameState world _ host frame _) -> do
-      if active then disableCursor else enableCursor
-      _ <- getMouseDelta
+      let Session _ _ _ _ _ _ _ _ _ control pointer = session
+      focused <- isWindowFocused
+      applyPointer control pointer (wantsPointer control focused (not active) False)
       now <- getTime
       writeIORef stateRef (Running session (FrameState world emptyClock (host {hostPaused = not active}) frame now))
     _ -> pure ()
@@ -311,26 +330,26 @@ shutdownGarden (GardenApp stateRef) = mask_ $ do
     Finished session -> releaseSession session
 
 releaseStartup :: Startup -> Maybe Resources -> IO ()
-releaseStartup (Startup window audio _ _) resources =
-  enableCursor
+releaseStartup (Startup window audio options _) resources =
+  when (optionControl options == Interactive) enableCursor
     `finally` shutdownAudio window audio
     `finally` mapM_ releaseResources resources
     `finally` closeWindow (Just window)
 
 releaseSession :: Session -> IO ()
-releaseSession (Session resources audio _ timingRef _ _ _ _ _) =
+releaseSession (Session resources audio _ timingRef _ _ _ _ _ control pointer) =
   let window = resourceWindow resources
       timings = do
         rows <- reverse <$> readIORef timingRef
         unless (null rows) (writeTiming rows)
-   in enableCursor
+   in applyPointer control pointer False
         `finally` shutdownAudio window audio
         `finally` timings
         `finally` releaseResources resources
         `finally` closeWindow (Just window)
 
 stepFrame :: Session -> FrameState -> IO (Maybe FrameState)
-stepFrame (Session resources audio (LightSignal handle glow) timingRef limit shotFrame shotName tour pilotRef) (FrameState w clock host frame previousTime) = do
+stepFrame (Session resources audio (LightSignal handle glow) timingRef limit shotFrame shotName tour pilotRef control pointer) (FrameState w clock host frame previousTime) = do
   now <- getTime
 #if defined(wasm32_HOST_ARCH)
   let close = False
@@ -341,7 +360,7 @@ stepFrame (Session resources audio (LightSignal handle glow) timingRef limit sho
   let completed = if tour == Just "islands" then Tour.expeditionDone pilotBefore else isJust tour && worldRestored w && null (worldBursts w)
   if close || completed || maybe False (frame >=) limit
     then do
-      when (limit == Nothing && tour == Nothing) (void (saveCurrent w))
+      when (control == Interactive && limit == Nothing && tour == Nothing) (void (saveCurrent w))
       when (isJust tour) $
         writeFile
           ".runtime/garden/tour-result.txt"
@@ -350,7 +369,7 @@ stepFrame (Session resources audio (LightSignal handle glow) timingRef limit sho
           )
       pure Nothing
     else do
-      pressed <- readPresses
+      pressed <- if control == Interactive then readPresses else pure []
       let esc = KeyEscape `elem` pressed
           f2 = KeyF2 `elem` pressed
           f3 = KeyF3 `elem` pressed
@@ -365,8 +384,11 @@ stepFrame (Session resources audio (LightSignal handle glow) timingRef limit sho
           photoEnter = not wasPhoto && photoToggle
           capture = KeyF12 `elem` pressed || wasPhoto && enter && not photoExit
       when f11 toggleBorderlessWindowed
+#if !defined(wasm32_HOST_ARCH)
+      when (KeyF4 `elem` pressed) $ modifyIORef' (resourceQuality resources) (preset . nextQuality . renderQuality)
+#endif
       focused <- isWindowFocused
-      let paused = if wasPhoto || photoEnter then hostPaused host else if not focused && tour == Nothing && limit == Nothing then True else if esc then not (hostPaused host) else hostPaused host
+      let paused = if wasPhoto || photoEnter then hostPaused host else if control == Interactive && not focused && tour == Nothing && limit == Nothing then True else if esc then not (hostPaused host) else hostPaused host
           startingPhoto = if photoExit then Nothing else if photoEnter then Just (beginPhoto (eye (worldPlayer w)) (forward (worldPlayer w))) else hostPhoto host
           frozen = paused || isJust startingPhoto || photoExit
       portrait <- case startingPhoto of
@@ -393,11 +415,8 @@ stepFrame (Session resources audio (LightSignal handle glow) timingRef limit sho
                 hostPhoto = portrait,
                 hostPhotoMessage = if photoEnter then Nothing else hostPhotoMessage host
               }
-      when (paused /= hostPaused host || photoEnter || photoExit) $ do
-        if paused && not (isJust portrait) then enableCursor else disableCursor
-        _ <- getMouseDelta
-        pure ()
-      observed <- if frozen || esc then pure idleInput else pollInput (hostInvert updatedHost) (playerSlot (worldPlayer w)) pressed
+      applyPointer control pointer (wantsPointer control focused paused (isJust portrait))
+      observed <- if control == ObserveOnly || frozen || esc then pure idleInput else pollInput (hostInvert updatedHost) (playerSlot (worldPlayer w)) pressed
       let input = observed
           dt = if frozen || esc then 0 else now - previousTime
           (inputs, nextClock) = if frozen || esc then ([], emptyClock) else schedule dt input clock
@@ -416,9 +435,10 @@ stepFrame (Session resources audio (LightSignal handle glow) timingRef limit sho
             Just p -> projected {sceneEye = photoEye p, sceneForward = photoForward p, sceneTarget = NoTarget, sceneBursts = filter (\b -> burstCue b /= Return && burstCue b /= Wound) (sceneBursts projected)}
       syncChunks resources view
       afterMesh <- getTime
-      updateAudio audio (sceneVeil view) frozen
-      playCues audio cues
-      let shouldSave = f5 || tour == Nothing && limit == Nothing && unTick (worldTick nextWorld) `div` 1800 > unTick (worldTick w) `div` 1800
+      when (control == Interactive) $ do
+        updateAudio audio (sceneVeil view) frozen
+        playCues audio cues
+      let shouldSave = control == Interactive && (f5 || tour == Nothing && limit == Nothing && unTick (worldTick nextWorld) `div` 1800 > unTick (worldTick w) `div` 1800)
       saved <- if shouldSave then saveCurrent nextWorld else pure False
       let status = if shouldSave then Just saved else hostSaved updatedHost
           recordUntil = if shouldSave then now + 3 else hostRecordUntil updatedHost
@@ -432,7 +452,7 @@ stepFrame (Session resources audio (LightSignal handle glow) timingRef limit sho
           Nothing -> do
             unless (hostHidden updatedHost) (renderInterface resources view (hostDebug updatedHost) (realToFrac (1 / max 0.0001 (now - previousTime))))
             when (not paused && now < recordUntil) (renderSaveFeedback resources status)
-            when paused (renderMenu resources status (hostInvert updatedHost))
+            when (paused && control == Interactive) (renderMenu resources status (hostInvert updatedHost))
             when (now < hostPhotoUntil updatedHost) (mapM_ (renderPhotoToast resources) (hostPhotoMessage updatedHost))
         tu <- getTime
         pure (tw, tu)
@@ -564,3 +584,15 @@ writeTiming rows = do
       percentile :: Double -> Double
       percentile ratio = case drop (floor (ratio * fromIntegral (length times - 1))) times of x : _ -> x; [] -> 0
   putStrLn (printf "garden frames=%d frame p50=%.3f p95=%.3f max=%.3f ms (includes paced present)" (length rows) (percentile 0.5) (percentile 0.95) (percentile 1))
+
+-- Only transitions touch the OS. Observers never read or change pointer state,
+-- including startup, focus loss, photo mode and teardown.
+applyPointer :: ControlMode -> IORef Bool -> Bool -> IO ()
+applyPointer ObserveOnly _ _ = pure ()
+applyPointer Interactive state wanted = do
+  previous <- readIORef state
+  when (previous /= wanted) $ do
+    if wanted then disableCursor else enableCursor
+    writeIORef state wanted
+    _ <- getMouseDelta
+    pure ()
