@@ -47,6 +47,10 @@
     display: flex; align-items: center; gap: .6rem; }
   #controls button, #controls a, #controls select, #retry { background: #102c30dd; border: 1px solid #b6ccbd66; border-radius: 2px;
     padding: .65rem .9rem; font-size: .75rem; color: #f3efe2; text-decoration: none; }
+  .render-options { position: relative; font-size: .75rem; }
+  .render-options summary { cursor: pointer; padding: .7rem; }
+  .render-options .panel { position: absolute; right: 0; top: 2.5rem; background: #102c30f5; border: 1px solid #b6ccbd66; padding: 1rem; min-width: 15rem; display: grid; gap: .65rem; }
+  .render-options label { display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
   .quality { display: flex; align-items: center; gap: .5rem; font-size: .75rem; text-shadow: 0 1px 5px #001820; }
   #retry { margin-top: 1.7rem; }
   #error-details { margin-top: 1.5rem; font-size: .72rem; text-align: left; color: #d1bda6; }
@@ -77,6 +81,13 @@
   </div>
   <nav id="controls" aria-label="画面と写真">
     <label class="quality">画質 <select id="quality" aria-label="画質"><option value="1">高</option><option value="0.75">標準</option><option value="0.5">軽量</option></select></label>
+    <details class="render-options"><summary>描画の調整</summary><div class="panel">
+      <label>解像度 <select data-render-option="0" aria-label="描画解像度"><option value="-1">画質に合わせる</option><option value="100">100%</option><option value="75">75%</option><option value="50">50%</option><option value="25">25%</option></select></label>
+      <label>影 <select data-render-option="1" aria-label="影"><option value="-1">画質に合わせる</option><option value="2">精細</option><option value="1">標準</option><option value="0">オフ</option></select></label>
+      <label>雲 <select data-render-option="2" aria-label="雲"><option value="-1">画質に合わせる</option><option value="2">精細</option><option value="1">標準</option><option value="0">オフ</option></select></label>
+      <label>接地陰影 <select data-render-option="3" aria-label="接地陰影"><option value="-1">画質に合わせる</option><option value="2">精細</option><option value="1">標準</option><option value="0">オフ</option></select></label>
+      <label>光のにじみ <select data-render-option="4" aria-label="光のにじみ"><option value="-1">画質に合わせる</option><option value="1">オン</option><option value="0">オフ</option></select></label>
+    </div></details>
     <a id="photo-download" hidden>写真を保存</a>
     <button id="fullscreen" title="全画面に切り替え（F11）" aria-label="全画面に切り替え">⛶ 全画面</button>
   </nav>

@@ -2,12 +2,12 @@
 precision highp float;
 precision highp int;
 in vec2 fragTexCoord;
-uniform sampler2D texture0;
+uniform sampler2D texture0,effectsMap,bloomMap,sceneDepth;
+uniform int hasEffects,hasBloom;
 uniform vec2 resolution;
 uniform vec3 grading; // Exposure in stops, film palette, bloom enable.
 uniform float vignette;
 out vec4 finalColor;
-vec3 bright(vec2 uv) {vec3 c=texture(texture0,uv).rgb;return c*max(max(c.r,max(c.g,c.b))-0.88,0.0);}
 vec3 antialias(vec2 uv, vec2 pixel) {
     vec3 c=texture(texture0,uv).rgb;
     vec3 nw=texture(texture0,uv+vec2(-1,-1)*pixel).rgb;
@@ -29,16 +29,27 @@ vec3 antialias(vec2 uv, vec2 pixel) {
 void main() {
     vec2 uv=fragTexCoord,texel=1.0/resolution;
     vec3 color=antialias(uv,texel);
-    vec3 bloom=bright(uv)*0.15;
-    for(int i=1;i<=4;i++) {
-        float d=float(i*i)*1.4;
-        bloom+=(bright(uv+vec2(d,0)*texel)+bright(uv-vec2(d,0)*texel)+bright(uv+vec2(0,d)*texel)+bright(uv-vec2(0,d)*texel))*0.047;
+    if(hasEffects!=0) {
+        // Bilateral upsampling avoids bleeding foreground AO onto the sky.
+        vec2 size=vec2(textureSize(effectsMap,0));
+        vec2 base=(floor(uv*size-0.5)+0.5)/size;
+        float center=texture(sceneDepth,uv).r, total=0.0;
+        vec4 effect=vec4(0.0);
+        for(int x=0;x<2;x++)for(int y=0;y<2;y++) {
+            vec2 at=clamp(base+vec2(x,y)/size,0.5/size,1.0-0.5/size);
+            float d=texture(sceneDepth,at).r;
+            float weight=exp(-abs(d-center)*24000.0)+0.0001;
+            effect+=texture(effectsMap,at)*weight;total+=weight;
+        }
+        effect/=total;
+        color=color*effect.a+effect.rgb;
     }
-    color+=bloom*0.72*grading.z;
-    color=clamp((color-0.035)*1.08,0.0,1.0);
-    color=pow(color,vec3(0.96));
+    if(hasBloom!=0) color+=texture(bloomMap,uv).rgb*0.13*grading.z;
     vec2 p=uv*2.0-1.0;
     color*=exp2(grading.x);
+    // Tone-map once, after exposure and all linear-light effects.
+    color=clamp((color*(2.51*color+0.03))/(color*(2.43*color+0.59)+0.14),0.0,1.0);
+    color=mix(color*12.92,1.055*pow(color,vec3(1.0/2.4))-0.055,step(vec3(0.0031308),color));
     if(grading.y>2.5) color=vec3(dot(color,vec3(0.2126,0.7152,0.0722)))*vec3(0.94,0.98,1.03);
     else if(grading.y>1.5) color=color*vec3(0.77,0.95,1.18)+vec3(0.015,0.008,0.025);
     else if(grading.y>0.5) color=color*vec3(1.14,1.02,0.83)+vec3(0.016,0.004,0.0);

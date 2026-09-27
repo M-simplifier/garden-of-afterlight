@@ -2468,6 +2468,21 @@ try {
   quality.value = String(renderScale(localStorage.getItem(qualityKey)));
 } catch {
 }
+var renderOptions = [...document.querySelectorAll("[data-render-option]")];
+var optionsKey = "afterlight:render-options:v1";
+try {
+  const saved = JSON.parse(localStorage.getItem(optionsKey) || "{}");
+  for (const option of renderOptions) if ([...option.options].some((entry) => entry.value === saved[option.dataset.renderOption]))
+    option.value = saved[option.dataset.renderOption];
+} catch {
+}
+function applyRenderPreferences() {
+  instance.exports.setQuality(state, Math.round(100 * renderScale(quality.value)));
+  for (const option of renderOptions) if (option.value !== "-1") {
+    if (!instance.exports.setRenderOption(state, Number(option.dataset.renderOption), Number(option.value)))
+      throw new Error("Invalid render preference");
+  }
+}
 var renderCheck = createRenderCheck(new URLSearchParams(location.search).get("render-check") === "1");
 var captureMessage = document.querySelector("#capture-message");
 var downloadPhoto = photoDownload(document.querySelector("#photo-download"));
@@ -2568,6 +2583,7 @@ function publishDiagnostics() {
     paints: performance.getEntriesByType("paint").map(({ name, startTime }) => ({ name, startTime })),
     raylibBreak: inspection.raylibBreak,
     layout: inspection.layout,
+    renderCapabilities: inspection.renderCapabilities,
     environment: inspection.environment,
     assets: inspection.assets,
     persistence: inspection.persistence,
@@ -2678,7 +2694,7 @@ function frame(at) {
     if (resizePending || qualityPending || displayPixelRatio !== window.devicePixelRatio) {
       let redraw = qualityPending;
       if (qualityPending) {
-        instance.exports.setQuality(state, Math.round(100 * renderScale(quality.value)));
+        applyRenderPreferences();
         refreshRaylibMemory(memory, raylib);
         qualityPending = false;
       }
@@ -2742,7 +2758,7 @@ function prepare() {
     phase(`prepare-${stage}`, phaseNames[stage], done, total);
     detail.textContent = stage === 3 ? `${done.toLocaleString()} / ${total.toLocaleString()}` : "\u305D\u306E\u307E\u307E\u3001\u5C11\u3057\u304A\u5F85\u3061\u304F\u3060\u3055\u3044";
     const began = performance.now();
-    if (stage === 4) instance.exports.setQuality(state, Math.round(100 * renderScale(quality.value)));
+    if (stage === 4) applyRenderPreferences();
     state = instance.exports.mainLoop(state);
     refreshRaylibMemory(memory, raylib);
     const elapsed = performance.now() - began;
@@ -2842,7 +2858,15 @@ async function load() {
       },
       freeHaskell: (pointer) => instance.exports.free(pointer),
       raylibLimit: RAYLIB_LIMIT,
-      invoke: (name, fn, args) => name === "_TakeScreenshot_" ? screenshots(name, fn, args) : input.invoke(name, fn, args)
+      invoke: (name, fn, args) => {
+        const result = name === "_TakeScreenshot_" ? screenshots(name, fn, args) : input.invoke(name, fn, args);
+        if (name === "_InitWindow_") {
+          const gl2 = canvas.getContext("webgl2");
+          const halfFloat = !!(gl2.getExtension("EXT_color_buffer_float") || gl2.getExtension("EXT_color_buffer_half_float"));
+          inspection.renderCapabilities = { halfFloat };
+        }
+        return result;
+      }
     })
   });
   inspection.layout = checkPartition();
@@ -2902,6 +2926,13 @@ quality.addEventListener("change", () => {
   qualityPending = true;
   try {
     localStorage.setItem(qualityKey, quality.value);
+  } catch {
+  }
+});
+for (const option of renderOptions) option.addEventListener("change", () => {
+  qualityPending = true;
+  try {
+    localStorage.setItem(optionsKey, JSON.stringify(Object.fromEntries(renderOptions.map((item) => [item.dataset.renderOption, item.value]))));
   } catch {
   }
 });

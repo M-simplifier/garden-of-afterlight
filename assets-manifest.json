@@ -1,27 +1,35 @@
 [
   {
     "path": "assets/shaders/voxel.vs",
-    "bytes": 476
+    "bytes": 588
   },
   {
-    "path": "assets/shaders/voxel.fs",
-    "bytes": 1449
+    "path": "assets/shaders/bloom.fs",
+    "bytes": 801
   },
   {
-    "path": "assets/shaders/sky.fs",
-    "bytes": 1935
+    "path": "assets/shaders/effects.fs",
+    "bytes": 2775
   },
   {
     "path": "assets/shaders/post.fs",
-    "bytes": 2228
+    "bytes": 2823
+  },
+  {
+    "path": "assets/shaders/sky.fs",
+    "bytes": 3253
+  },
+  {
+    "path": "assets/shaders/voxel.fs",
+    "bytes": 3439
   },
   {
     "path": "assets/fonts/glyphs.txt",
-    "bytes": 931
+    "bytes": 943
   },
   {
     "path": "assets/fonts/NotoSansCJKjp-Regular.otf",
-    "bytes": 202212
+    "bytes": 204216
   },
   {
     "path": "assets/fonts/LICENSE-NotoSansCJK.txt",
