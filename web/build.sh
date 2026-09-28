@@ -187,4 +187,8 @@ pathlib.Path(path).write_text(json.dumps(dict(ghc=ghc, cabal=cabal, emscripten=e
     h_raylib_archive_sha256=archive, h_raylib_patch_sha256=patch, fonttools='4.61.1'), indent=2) + '\n')
 PY
 python3 "$web/prepare-assets.py" "$assets" "$output" --fonttools-wheel "$fonttools"
+# The technical guide is an independent page at /guide/; the game has no link to it.
+mkdir -p "$output/guide"
+cp -- "$web/guide/index.html" "$output/guide/index.html"
+cp -R -- "$web/guide/assets" "$output/guide/"
 printf '\nBrowser files: %s\nServe locally: python3 "%s/serve.py" --directory "%s"\n' "$output" "$web" "$output"

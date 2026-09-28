@@ -1,3 +1,4 @@
 web/** text eol=lf
+web/guide/assets/* binary
 # A unified diff represents an empty context line with one literal space.
 web/patches/*.patch whitespace=-blank-at-eol

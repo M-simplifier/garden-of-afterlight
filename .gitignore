@@ -62,3 +62,9 @@
 !web/host/test/*.mjs
 !web/host/public/
 !web/host/public/index.html
+!web/guide/
+!web/guide/*.html
+!web/guide/*.md
+!web/guide/assets/
+!web/guide/assets/*.png
+!web/guide/assets/*.jpg

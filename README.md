@@ -39,6 +39,9 @@ Afterlightは地形編集、移動、保存、表示・音声などの具体例�
 
 ## 最初に読む一枚
 
+設計の全体像は、**[純粋な関数から、触れられる世界へ](https://m-simplifier.github.io/garden-of-afterlight/guide/)** で読めます。
+構成図から実際の型へたどれる、Afterlightの技術解説です。
+
 **[Garden.Change](src/Garden/Change.hs)** — 「置く」「取り去る」を重ね、庭に反映し、二つの庭の差を取り出す62行。
 
 ```haskell
@@ -126,6 +129,7 @@ cabal run noema-render-check -fnative
 
 Haskellコード、GLSLシェーダー、Cabal設定、検査用データ、ブラウザ出力のコード・ツール、実装スキルを公開しています。
 作品の画像、フォント、音源、実行ファイル、個人のセーブ、企画書は含みません。
+ただし、技術解説に使うゲーム画面とリンク紹介画像は `web/guide/assets/` に同梱しています。
 ブラウザ互換用の小さなscreen vertex shaderはビルドツールに含みます。
 Haskellで記述した地形・モデル・音声の生成処理はコードの一部として含みます。
 
