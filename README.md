@@ -44,7 +44,7 @@ Afterlightは地形編集、移動、保存、表示・音声などの具体例�
 
 ## 最初に読む一枚
 
-設計の全体像は、**[純粋な関数から、触れられる世界へ](https://m-simplifier.github.io/garden-of-afterlight/guide/)** で読めます。
+設計の全体像は、**[Haskellでつくる余光の庭](https://m-simplifier.github.io/garden-of-afterlight/guide/)** で読めます。
 構成図から実際の型へたどれる、Afterlightの技術解説です。
 
 **[型からコードを読む](editors/README.md)** — Neovim・VS Code向けのHaskell Designを同梱しています。

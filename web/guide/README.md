@@ -9,7 +9,7 @@ Haskell declarations. Source links point to the exact `9163e6b` revision used by
 the article. The three screenshots live in `assets/`; the guide loads no game
 runtime, analytics, external fonts or scripts.
 
-`card.html` is the 1200 × 630 HTML artwork for `assets/social-card.jpg`.
+`card.html` is the 1200 × 630 HTML artwork for `assets/social-card-ja-20260929.jpg`.
 Render it in a browser at that viewport and capture the page content when
 updating the card. The current image uses the same night scene, typography and
 title as the article. Both Open Graph and `summary_large_image` metadata are
@@ -36,3 +36,10 @@ If the published card is replaced, use a new image filename and update the
 Open Graph and Twitter image URLs together so existing social caches can fetch
 the new image. A successful public fetch and valid metadata do not by themselves
 confirm the final card rendered by X.
+
+Japanese copy is edited as an explanation of the implementation. Use concrete
+section titles and complete sentences; avoid promotional metaphors, rhetorical
+fragments and literal-English phrasing. Preserve the pinned declarations, source
+links, measurements, qualifications and interactive examples when editing prose.
+Check the page at desktop and mobile widths, and update the title, metadata,
+README link label and social-card artwork together.
