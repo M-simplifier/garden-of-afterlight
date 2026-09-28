@@ -11,7 +11,7 @@ the extension host that runs the Haskell tools, not only on the desktop host.
 Reuse an available Afterlight checkout containing `editors/haskell-design/`, or the
 user's existing Haskell Design installation. If this skill was copied alone, its
 public distribution is `https://github.com/M-simplifier/garden-of-afterlight.git`.
-The tested viewer is 0.4.2 at commit `cef99befd267f58e9bef224218f76800a976df71`.
+The tested distribution is 0.5.0 at commit `485d376a1da3c6c33cd7b95c360569d601c1e038`.
 For a reproducible setup, clone it into an ignored local tools directory, check out
 that revision, and run **only `node editors/setup.mjs build`** from that checkout.
 The distribution's `prepare`, `configure`, standalone Neovim profile and `verify`
