@@ -3,6 +3,8 @@
 Haskellファイルを開くと、まずデータ定義・型・関数の入出力を表示するVS Code拡張とNeovimプラグインです。同じローカル解析器を使うので、両エディタで同じ設計ビューとIO判定が得られます。
 
 Afterlightを初めて開く場合は、[エディタ環境のセットアップ](https://github.com/M-simplifier/garden-of-afterlight/blob/main/editors/README.md)から始めてください。
+別のゲームで使う場合は、[新しいプロジェクトへの接続](https://github.com/M-simplifier/garden-of-afterlight/blob/main/editors/README.md#別のゲームで使う)を参照してください。
+ビュワー本体は共通で、セットアップスキルがそのゲームのCabal構成とエディタを接続します。
 
 ## できること
 

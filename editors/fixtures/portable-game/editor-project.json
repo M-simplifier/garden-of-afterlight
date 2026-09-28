@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "package": "lantern-courier",
+  "cabalFile": "lantern-courier.cabal",
+  "ghcOptions": ["-XGHC2021"],
+  "components": [
+    { "path": "engine", "component": "lib", "sourceDirs": ["engine"] },
+    { "path": "desktop", "component": "exe:courier", "sourceDirs": ["desktop"] },
+    { "path": "checks", "component": "test:rules", "sourceDirs": ["checks"] }
+  ]
+}

@@ -9,6 +9,8 @@ await mkdir('.test-output', { recursive: true });
 // macOS Unix sockets have a short path limit; the project may have a long Unicode path.
 const temporary = await mkdtemp(path.join(process.platform === 'win32' ? os.tmpdir() : '/tmp', 'hd-vscode-'));
 const project = process.env.HASKELL_DESIGN_TEST_PROJECT;
+const portable = process.env.HASKELL_DESIGN_TEST_PORTABLE === '1';
+if (portable && !project) throw new Error('Portable project tests require HASKELL_DESIGN_TEST_PROJECT.');
 const workspace = project ? path.resolve(project) : path.join(temporary, 'workspace');
 if (!project) await cp('examples', workspace, { recursive: true });
 if (!project && process.env.HASKELL_DESIGN_TEST_AUTO) {
@@ -36,14 +38,14 @@ await writeFile(path.join(userData, 'User/settings.json'), JSON.stringify({ 'tel
 const binary = process.env.VSCODE_EXECUTABLE || ['Code', 'Electron']
   .map(name => `/Applications/Visual Studio Code.app/Contents/MacOS/${name}`).find(existsSync);
 if (!binary) throw new Error('Set VSCODE_EXECUTABLE to the VS Code application executable.');
-const reportName = project ? 'vscode-afterlight-result.json' : process.env.HASKELL_DESIGN_TEST_AUTO ? 'vscode-auto-result.json' : 'vscode-result.json';
+const reportName = portable ? 'vscode-portable-result.json' : project ? 'vscode-afterlight-result.json' : process.env.HASKELL_DESIGN_TEST_AUTO ? 'vscode-auto-result.json' : 'vscode-result.json';
 const env = { ...process.env, HASKELL_DESIGN_TEST_RESULT: path.join(root, '.test-output', reportName) };
 await rm(env.HASKELL_DESIGN_TEST_RESULT, { force: true });
 delete env.ELECTRON_RUN_AS_NODE;
-const args = [project ? path.join(workspace, '.runtime/haskell-editor/afterlight.code-workspace') : workspace,
+const args = [project && !portable ? path.join(workspace, '.runtime/haskell-editor/afterlight.code-workspace') : workspace,
   '--new-window', '--skip-welcome', '--skip-release-notes', ...(!project ? ['--disable-extensions'] : []),
   '--user-data-dir', userData, '--extensions-dir', process.env.VSCODE_TEST_EXTENSIONS ?? path.join(temporary, 'extensions'),
-  '--extensionDevelopmentPath', extensionPath, '--extensionTestsPath', path.join(root, project ? 'dist/tests/afterlight.test.cjs' : 'dist/tests/extension.test.cjs')];
+  '--extensionDevelopmentPath', extensionPath, '--extensionTestsPath', path.join(root, portable ? 'dist/tests/portable.test.cjs' : project ? 'dist/tests/afterlight.test.cjs' : 'dist/tests/extension.test.cjs')];
 console.log('VS Code integration workspace:', workspace);
 const child = spawn(binary, args, { env, stdio: 'inherit', windowsHide: true });
 const timer = setTimeout(() => child.kill('SIGTERM'), project ? 600000 : 150000);

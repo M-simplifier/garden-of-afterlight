@@ -41,6 +41,7 @@ advance :: TickInput -> GameState -> (GameState, [Effect])
 | 今回扱うもの | 参照 |
 | --- | --- |
 | ツールチェーン、依存、OS、起動・配布 | [stack](references/stack.md) |
+| 新作・別repoのVS Code／Neovim、型ビュワー、GHC/HLSの接続 | [editors](references/editors.md) |
 | ブラウザ出力、起動・入力・配信、Wasm・WebGL | [browser](references/browser.md) |
 | 入力、固定刻み、FRP、保存・再構築 | [time-and-state](references/time-and-state.md) |
 | カメラ、衝突、モデル、ボクセル、音・フォント | [space-and-resources](references/space-and-resources.md) |
@@ -53,3 +54,6 @@ advance :: TickInput -> GameState -> (GameState, [Effect])
 Afterlightの定数や全構成を新作の必須条件にしない。
 未確認のライブラリAPIは利用中の版のソースまたは公式資料で確認する。
 実行できなかった確認は、確認済みの範囲と分けて伝える。
+
+新作の開発環境を用意する場合は、[エディタへの接続](references/editors.md)も読む。
+ゲーム固有のビルド設定に合わせ、利用者がそのフォルダを開いてコードを読めるところまで整える。

@@ -71,6 +71,50 @@ VS Codeが `editors/haskell-design/.test-output/` 内の `vscode-result.json`、
 HLSの初回起動はCabal構成を読むため数分かかる場合があります。結果ファイルの成功を確認してください。
 ゲームのソースには検証の編集を保存しません。
 
+## 別のゲームへの持ち出しを再現する
+
+Windows / GHC 9.6.7 / Cabal 3.12.1.0 / HLS 2.14.0.0 / VS Code 1.127.0で確認しました。
+コピーしたスキルによる設定・コンパイラ検査 **14件**、配布VSIXを使ったVS Code／HLS検査 **28件**が成功しています。
+これは実際のエディタを使った自動検査で、人間による操作感の評価や他OSの確認ではありません。
+
+`editors/fixtures/portable-game/` は、Afterlightとは別名・別配置の小さな端末ゲームです。
+`lantern-courier`というパッケージに、`engine/`のlibrary、`desktop/`のexecutable、
+`checks/`のtestがあります。libraryは`containers`を使い、hostとtestはそのlibraryへ依存します。
+ゲームの描画や性能ではなく、別プロジェクトのエディタ接続を検査するための実装です。
+
+repoルートで、拡張をビルド済みの状態から実行します。
+
+```sh
+node editors/test-project-setup.mjs
+```
+
+この検査はOSの一時フォルダに独立したGit repoを作り、3つのスキルをコピーします。
+そのコピーに含まれる設定生成スクリプトを使い、実際のCabalビルドとゲームのルール検査、
+型解析、設定の競合時に何も上書きしないこと、JSONCの既存設定を残すことを確認します。
+ビルド済みlibraryのソースへ型エラーを入れる検査では、host側の解析も失敗することを確かめ、
+古いコンパイル済みlibraryで成功してしまう状態を検出します。終了前にソースを復元します。
+
+GHCなどを明示する場合は `HASKELL_DESIGN_TEST_GHC`、`HASKELL_DESIGN_TEST_CABAL`、
+`HASKELL_DESIGN_TEST_HLS` を設定します。結果と作成したフォルダの場所は
+`.runtime/editor-portability/setup-result.json` に残ります。
+
+続いて、そのフォルダをVS Codeで開く検査を実行します。専用の拡張フォルダに
+公式Haskell拡張を導入したうえで、`editors/haskell-design/` から:
+
+```powershell
+$env:VSCODE_EXECUTABLE = 'C:/path/to/Microsoft VS Code/Code.exe'
+$env:VSCODE_TEST_EXTENSIONS = 'C:/path/to/isolated-vscode-extensions'
+$env:HASKELL_DESIGN_TEST_PROJECT = (Get-Content ../../.runtime/editor-portability/setup-result.json -Raw | ConvertFrom-Json).project
+$env:HASKELL_DESIGN_TEST_PORTABLE = '1'
+$env:HASKELL_DESIGN_TEST_VSIX = 'artifacts/haskell-design.vsix'
+npm run test:vscode
+```
+
+`.code-workspace`ではなくフォルダ自体を開き、配布VSIX・公式Haskell拡張・実際のHLSを使用します。
+結果は `.test-output/vscode-portable-result.json` です。型ビューが既定で開くこと、推論型、
+Pure/IO、全3コンポーネントの型情報、定義・参照・補完・整形、未保存の型エラー、
+ビュー切り替え後のUndoと診断の消去を検査します。
+
 ## 主張しないこと
 
 - macOS/Linux/WSLでこのAfterlightセットアップ全体が成功するという実機確認。

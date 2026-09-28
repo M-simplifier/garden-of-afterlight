@@ -14,11 +14,12 @@ Haskellの品質基準は **`haskell-excellence`** にまとめ、`fp-gamedev`�
 | --- | --- |
 | [haskell-excellence](.agents/skills/haskell-excellence/SKILL.md) | 型と不変条件、純粋性、エラー、抽象化、資源管理、意味のある検査 |
 | [fp-gamedev](.agents/skills/fp-gamedev/SKILL.md) | 技術スタック、時間と入力、3D空間、アセット、保存、相互作用、性能、検証 |
+| [haskell-editor-setup](.agents/skills/haskell-editor-setup/SKILL.md) | そのゲームをVS Code／Neovimで読むための型ビュワー、GHC・HLS、導入と動作確認 |
 
-**新作に取り込むには**、`.agents/skills/`内の二つのフォルダを、同じ並びのまま
-新作repoの`.agents/skills/`へコピーします。各フォルダの`references/`、`agents/`、
+**新作に取り込むには**、`.agents/skills/`内の上記三つのフォルダを、同じ並びのまま
+新作repoの`.agents/skills/`へコピーします。各フォルダの`references/`、`scripts/`、`agents/`、
 `LICENSE`も含めます。既に同名のスキルがある場合は内容を比較して採用する版を選んでください。
-Codexはこの配置からスキルを発見できます。他のAIでは、二つの`SKILL.md`の場所を渡し、
+Codexはこの配置からスキルを発見できます。他のAIでは、必要な`SKILL.md`の場所を渡し、
 参照先を必要に応じて読むよう依頼してください。
 配置の詳細は[公式説明](https://learn.chatgpt.com/docs/build-skills#where-codex-loads-local-skills)を参照できます。
 
@@ -31,6 +32,10 @@ $fp-gamedev を使って、以下の仕様のゲームを実装してくださ�
 [実装対応表](.agents/skills/fp-gamedev/references/afterlight.md)からAfterlightのコードと検査へ辿れます。
 参照は公開commitに固定してあり、スキルだけを新作へ移しても使えます。
 ライブラリとしてAfterlight全体へ依存する必要はありません。
+
+作ったゲームも **[VS Codeで型から読めます](editors/README.md#別のゲームで使う)**。
+`haskell-editor-setup`は新作のCabal構成に合わせて接続し、フォルダを開いた状態で
+型表示・移動・補完・診断まで確認するためのスキルです。
 
 技術資料は複数のゲーム実装から抽出した判断と、その適用条件・検査方法です。
 Afterlightは地形編集、移動、保存、表示・音声などの具体例を示します。

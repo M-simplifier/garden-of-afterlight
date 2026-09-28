@@ -1,6 +1,6 @@
 ---
 name: haskell-editor-setup
-description: "Set up or repair the bundled Haskell Design viewer and full GHC/HLS editing support for Afterlight in Neovim or VS Code. Use for type-first code browsing, editor installation, compiler/project wiring, and end-to-end verification without private dotfiles."
+description: "Set up or repair Haskell Design and GHC/HLS support in VS Code or Neovim, for Afterlight or another Haskell game, including projects made with fp-gamedev. Connect the target project's compiler, Cabal components and editor, and verify real code without private dotfiles."
 ---
 
 # Haskell editor setup
@@ -10,7 +10,22 @@ declarations and inferred types, IO/Pure hints, implementation folding, navigati
 source/Undo round trips, design diffs, and HLS completion/diagnostics/formatting.
 Installing the extension alone is not completion.
 
-## Locate and inspect
+## Choose the target project
+
+The project being edited and the repository distributing the viewer may be different.
+Inspect the **target** project's build files before choosing a setup route.
+
+- **Afterlight itself:** use the Afterlight procedure below.
+- **A new or existing game, including one made with `fp-gamedev`:** read
+  [other-projects](references/other-projects.md) and follow that route instead.
+  It includes a public, pinned viewer source and a helper shipped inside this skill.
+  Copy this entire skill directory, not only `SKILL.md`, when bringing it to a new repo.
+
+Do not run Afterlight's `prepare` / `configure` commands in a different game, impose
+its package/module names, or copy its generated host paths. Opening a folder does
+not install a VSIX or prepare that project's Haskell dependencies.
+
+## Afterlight: locate and inspect
 
 Find the checkout containing `garden-of-afterlight.cabal` and `editors/setup.mjs`.
 Read `editors/README.md` and `editors/setup.md` there; paths in this skill are relative
