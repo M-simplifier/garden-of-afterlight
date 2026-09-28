@@ -1,0 +1,12 @@
+**
+!package.json
+!README.md
+!LICENSE
+!CHANGELOG.md
+!THIRD_PARTY_NOTICES.md
+!dist/extension.cjs
+!dist/*.wasm
+!media/**
+!compiler/**
+!examples/**
+!docs/**

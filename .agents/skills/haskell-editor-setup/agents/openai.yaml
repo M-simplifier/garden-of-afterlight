@@ -1,0 +1,4 @@
+interface:
+  display_name: "Haskellエディタを整える"
+  short_description: "Neovim・VS Codeの型ビュワーとGHC/HLSを導入し、実コードで動作を確認する"
+  default_prompt: "$haskell-editor-setup を使って、Haskell DesignとGHC/HLSをこのエディタに接続し、Afterlightのコードで型表示・移動・補完・診断まで確認してください。"

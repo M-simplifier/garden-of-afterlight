@@ -1,0 +1,8 @@
+node_modules/
+dist/
+artifacts/
+.test-output/
+.DS_Store
+*.hi
+*.o
+nvim.log

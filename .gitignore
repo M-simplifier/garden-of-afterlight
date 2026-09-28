@@ -68,3 +68,11 @@
 !web/guide/assets/
 !web/guide/assets/*.png
 !web/guide/assets/*.jpg
+!editors/
+!editors/**
+editors/**/node_modules/
+editors/**/dist/
+editors/**/artifacts/
+editors/**/.test-output/
+!.agents/skills/haskell-editor-setup/
+!.agents/skills/haskell-editor-setup/**

@@ -1,0 +1,184 @@
+{
+  "name": "haskell-design",
+  "displayName": "Haskell Design",
+  "description": "Read Haskell declarations, inspect IO boundaries, and compare design changes.",
+  "version": "0.4.2",
+  "publisher": "local-tools",
+  "private": true,
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.96.0",
+    "node": ">=20"
+  },
+  "categories": [
+    "Programming Languages",
+    "Visualization"
+  ],
+  "extensionKind": [
+    "workspace"
+  ],
+  "main": "./dist/extension.cjs",
+  "activationEvents": [
+    "onLanguage:haskell",
+    "onLanguage:literate haskell",
+    "workspaceContains:**/*.hs"
+  ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": "limited",
+      "description": "Design views work without trust. GHC verification and Git access require a trusted workspace."
+    }
+  },
+  "contributes": {
+    "customEditors": [
+      {
+        "viewType": "haskellDesign.editor",
+        "displayName": "Haskell Design",
+        "selector": [
+          {
+            "filenamePattern": "*.hs"
+          }
+        ],
+        "priority": "default"
+      }
+    ],
+    "languages": [
+      {
+        "id": "haskell",
+        "extensions": [
+          ".hs"
+        ],
+        "aliases": [
+          "Haskell",
+          "haskell"
+        ]
+      }
+    ],
+    "commands": [
+      {
+        "command": "haskellDesign.open",
+        "title": "Haskell Design: Open Design View",
+        "icon": "$(symbol-structure)"
+      },
+      {
+        "command": "haskellDesign.source",
+        "title": "Haskell Design: Edit Source",
+        "icon": "$(code)"
+      },
+      {
+        "command": "haskellDesign.diff",
+        "title": "Haskell Design: Compare Design with Git HEAD",
+        "icon": "$(diff)"
+      },
+      {
+        "command": "haskellDesign.verify",
+        "title": "Haskell Design: Verify with GHC",
+        "icon": "$(check)"
+      },
+      {
+        "command": "haskellDesign.refresh",
+        "title": "Haskell Design: Refresh Files",
+        "icon": "$(refresh)"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "haskellDesign.open",
+          "when": "resourceExtname == .hs && activeCustomEditorId != haskellDesign.editor",
+          "group": "navigation"
+        },
+        {
+          "command": "haskellDesign.source",
+          "when": "activeCustomEditorId == haskellDesign.editor",
+          "group": "navigation"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "haskellDesign.open",
+          "when": "resourceExtname == .hs",
+          "group": "haskellDesign"
+        },
+        {
+          "command": "haskellDesign.diff",
+          "when": "resourceExtname == .hs",
+          "group": "haskellDesign"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "haskellDesign.refresh",
+          "when": "view == haskellDesign.files",
+          "group": "navigation"
+        }
+      ]
+    },
+    "views": {
+      "explorer": [
+        {
+          "id": "haskellDesign.files",
+          "name": "Haskell Design"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Haskell Design",
+      "properties": {
+        "haskellDesign.ghcPath": {
+          "type": "string",
+          "default": "ghc",
+          "scope": "machine-overridable",
+          "description": "GHC executable used for verification. GHC 9.6.x is supported."
+        },
+        "haskellDesign.ghcOptions": {
+          "scope": "resource",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Additional GHC arguments such as -isrc or -package=containers. Used only in trusted workspaces."
+        },
+        "haskellDesign.autoVerify": {
+          "scope": "resource",
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically index audited Haskell sources in trusted workspaces. Reuse verified results and check changed dependencies in the background."
+        },
+        "haskellDesign.maxFiles": {
+          "scope": "resource",
+          "type": "number",
+          "default": 500,
+          "minimum": 1,
+          "maximum": 5000,
+          "description": "Maximum number of Haskell files in the design explorer."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "check": "tsc --noEmit",
+    "test": "npm run build && node --test dist/tests/core.test.cjs dist/tests/audit.test.cjs",
+    "test:neovim": "node scripts/test-neovim.mjs",
+    "test:vscode": "node scripts/test-vscode.mjs",
+    "package": "npm run build && vsce package --no-dependencies --no-rewrite-relative-links -o artifacts/haskell-design.vsix",
+    "vscode:prepublish": "npm run check",
+    "package:neovim": "node scripts/package-neovim.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "22.15.30",
+    "@types/vscode": "1.96.0",
+    "@vscode/vsce": "3.6.2",
+    "esbuild": "0.25.5",
+    "tree-sitter-haskell": "0.23.1",
+    "typescript": "5.9.3",
+    "web-tree-sitter": "0.25.10"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/M-simplifier/garden-of-afterlight.git",
+    "directory": "editors/haskell-design"
+  }
+}
