@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { auditScope } from '../src/auditScope';
-import { ProjectAudit } from '../src/audit';
+import { ProjectAudit, AuditSnapshot } from '../src/audit';
 import { Projector } from '../src/projector';
 
 const repo = path.resolve(__dirname, '../..');
@@ -34,16 +34,23 @@ test('automatic audit discovers owned sources, caches GHC evidence, and only rec
     assert.equal(audit.snapshot.stats.parsed, 0);
     assert.equal(audit.snapshot.stats.reused, 3);
     const warm = { ...audit.snapshot.stats };
+    // Delayed OS notifications can cause a cached scan after the change scan.
+    // Measure the published change scan instead of whichever scan happens last.
+    const scans: AuditSnapshot['stats'][] = [];
+    const recordScan = (snapshot: AuditSnapshot) => { if (!snapshot.pending) scans.push({ ...snapshot.stats }); };
+    audit.on('change', recordScan);
     await fs.writeFile(path.join(root, 'src/A.hs'), 'module A where\na :: IO ()\na = pure ()\n');
     audit.invalidate(path.join(root, 'src/A.hs'));
     assert.notEqual(audit.snapshot.tree.summary.status, 'pure', 'a stale Pure badge survived invalidation');
     await audit.refresh();
+    audit.off('change', recordScan);
     assert.equal(audit.snapshot.designs[path.join(root, 'src/A.hs')]?.status, 'io');
     assert.equal(audit.snapshot.designs[path.join(root, 'src/B.hs')]?.status, 'io');
     assert.equal(audit.snapshot.designs[path.join(root, 'src/C.hs')]?.status, 'pure');
-    assert.equal(audit.snapshot.stats.checked, 2);
-    assert.equal(audit.snapshot.stats.reused, 1);
-    const incremental = { ...audit.snapshot.stats };
+    const incremental = scans.find(scan => scan.checked > 0);
+    assert.equal(incremental?.checked, 2);
+    assert.equal(incremental?.reused, 1);
+    assert.ok(scans.every(scan => scan.checked === 0 || scan.checked === 2));
     let events = 0; audit.on('change', () => events++);
     await fs.writeFile(path.join(root, 'dist-newstyle/Generated.hs'), 'still invalid');
     await fs.writeFile(path.join(root, 'docs/Example.hs'), 'still invalid');

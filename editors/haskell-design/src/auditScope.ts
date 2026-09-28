@@ -1,6 +1,6 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { isProjectConfig, readProjectConfig } from './projectConfig';
+import { isProjectConfig, readProjectConfig, ProjectConfig } from './projectConfig';
 
 export const within = (parent: string, file: string): boolean => {
   const rel = path.relative(parent, file);
@@ -28,7 +28,7 @@ function cabalSources(text: string, dir: string): { roots: string[]; files: stri
   type Stanza = { kind: string; name: string; fields: Map<string, string[]> };
   const stanzas: Stanza[] = [];
   let current: Stanza | undefined;
-  const lines = text.split('\n');
+  const lines = text.split(/\r?\n/);
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]!.replace(/--.*/, '');
     const header = /^(library|executable|test-suite|benchmark|foreign-library|common)\b\s*(.*?)\s*$/i.exec(line);
@@ -74,8 +74,8 @@ function cabalSources(text: string, dir: string): { roots: string[]; files: stri
 
 // Discover build-owned source roots without reading arbitrary .hs files. Cabal
 // fields can continue over lines and occur in conditional/common stanzas.
-export async function auditScope(root: string, limit = 500): Promise<AuditScope> {
-  const config = await readProjectConfig(root);
+export async function auditScope(root: string, limit = 500, sourceConfig?: ProjectConfig): Promise<AuditScope> {
+  const config = sourceConfig ?? await readProjectConfig(root);
   const excluded = [...(config.audit?.exclude ?? []), ...(config.components ?? []).filter(c => c.unsupportedReason).map(c => c.path)].map(p => path.resolve(root, p));
   const allowed = (file: string) => !excluded.some(p => within(p, file));
   const dirs = new Set<string>([root]), configs: string[] = [], sourceRoots = new Set<string>();

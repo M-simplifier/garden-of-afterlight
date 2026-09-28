@@ -2,7 +2,7 @@
   "name": "haskell-design",
   "displayName": "Haskell Design",
   "description": "Read Haskell declarations, inspect IO boundaries, and compare design changes.",
-  "version": "0.4.2",
+  "version": "0.5.0",
   "publisher": "local-tools",
   "private": true,
   "license": "MIT",
@@ -160,7 +160,7 @@
   "scripts": {
     "build": "node scripts/build.mjs",
     "check": "tsc --noEmit",
-    "test": "npm run build && node --test dist/tests/core.test.cjs dist/tests/audit.test.cjs",
+    "test": "npm run build && node --test dist/tests/core.test.cjs dist/tests/audit.test.cjs dist/tests/reader.test.cjs",
     "test:neovim": "node scripts/test-neovim.mjs",
     "test:vscode": "node scripts/test-vscode.mjs",
     "package": "npm run build && vsce package --no-dependencies --no-rewrite-relative-links -o artifacts/haskell-design.vsix",

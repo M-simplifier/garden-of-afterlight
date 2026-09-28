@@ -5,6 +5,7 @@
 !CHANGELOG.md
 !THIRD_PARTY_NOTICES.md
 !dist/extension.cjs
+!dist/read.cjs
 !dist/*.wasm
 !media/**
 !compiler/**

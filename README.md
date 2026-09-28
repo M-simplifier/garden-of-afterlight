@@ -52,6 +52,10 @@ Afterlightは地形編集、移動、保存、表示・音声などの具体例�
 **[`haskell-editor-setup`](.agents/skills/haskell-editor-setup/SKILL.md)** をAIへ渡すと、
 コンパイラ・HLS・エディタ設定の導入から、実コードでの動作確認まで進められます。
 
+**[AIも型とデータ定義から読む](editors/haskell-design/docs/reader.md)** — `map` / `outline` / `show` で
+全体を把握し、必要な関数の実装だけを取得できます。通常の読取にはNodeだけを使います。
+`fp-gamedev`にもこの読み方を組み込んでいます。
+
 **[Garden.Change](src/Garden/Change.hs)** — 「置く」「取り去る」を重ね、庭に反映し、二つの庭の差を取り出す62行。
 
 ```haskell

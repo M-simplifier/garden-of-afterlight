@@ -115,6 +115,21 @@ npm run test:vscode
 Pure/IO、全3コンポーネントの型情報、定義・参照・補完・整形、未保存の型エラー、
 ビュー切り替え後のUndoと診断の消去を検査します。
 
+## LLM向け読取コマンド（0.5.0）
+
+`map` / `outline` / `show` をWindowsのNode.js 24.13.0で確認しました。
+読取11件を含む共用解析器・GHC・監視の検査は50件成功、Windowsで作れない
+ファイルシンボリックリンクの検査1件はスキップです。Neovimの既存5スイートも成功しました。
+
+VSIXとNeovimアーカイブをそれぞれ展開し、同梱の `dist/read.cjs` を直接実行しています。
+Afterlightの `Garden.Change.apply` と、別フォルダへコピーしたLantern Courierの
+4ファイルの型一覧・`Lantern.Rules.advance` の複数節を取得できました。
+読取のためのエディタ起動や対象ゲームのビルドは行っていません。
+
+Afterlightでは31ファイル・379宣言が対象で、型一覧は全文より約85%少ないトークン数です。
+比較方法と数値は[読取ガイド](haskell-design/docs/reader.md#afterlightでの削減量)を参照してください。
+これは入力量の測定で、LLMによる開発精度や作業時間の改善を実証したものではありません。
+
 ## 主張しないこと
 
 - macOS/Linux/WSLでこのAfterlightセットアップ全体が成功するという実機確認。

@@ -53,6 +53,7 @@ advance :: TickInput -> GameState -> (GameState, [Effect])
 
 | 今回扱うもの | 参照 |
 | --- | --- |
+| 既存コードの全体像、型・データ定義、必要な関数の実装を読む | [code-reading](references/code-reading.md) |
 | ツールチェーン、依存、OS、起動・配布 | [stack](references/stack.md) |
 | 新作・別repoのVS Code／Neovim、型ビュワー、GHC/HLSの接続 | [editors](references/editors.md) |
 | ブラウザ出力、起動・入力・配信、Wasm・WebGL | [browser](references/browser.md) |
@@ -63,6 +64,7 @@ advance :: TickInput -> GameState -> (GameState, [Effect])
 | 法則、生成テスト、実機、形式証明、共通化 | [verification](references/verification.md) |
 | 動くコードで境界や技法を確かめたい | [Afterlightの実装対応表](references/afterlight.md) |
 
+既存Haskellの全体を把握するときは、[型と関数を選んで読む](references/code-reading.md)手順を使う。
 例を読むときは、必要な関数と呼び出し側・検査を一組で追う。
 Afterlightの定数や全構成を新作の必須条件にしない。
 未確認のライブラリAPIは利用中の版のソースまたは公式資料で確認する。

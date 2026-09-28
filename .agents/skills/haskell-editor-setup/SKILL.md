@@ -10,6 +10,11 @@ declarations and inferred types, IO/Pure hints, implementation folding, navigati
 source/Undo round trips, design diffs, and HLS completion/diagnostics/formatting.
 Installing the extension alone is not completion.
 
+For AI code reading, version 0.5.0 also ships `dist/read.cjs`: `map`, `outline`,
+and `show`. Its syntax view needs only Node; do not require a full editor or GHC
+setup just to use it. Follow the distribution's `docs/reader.md` or the copied
+[code-reading reference](../fp-gamedev/references/code-reading.md).
+
 ## Choose the target project
 
 The project being edited and the repository distributing the viewer may be different.

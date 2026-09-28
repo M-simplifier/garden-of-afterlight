@@ -21,13 +21,20 @@ function descendants(node: SyntaxNode, predicate: (n: SyntaxNode) => boolean): S
   return result;
 }
 function namesOf(n: SyntaxNode): string[] {
+  const normalize = (name: string) => name.replace(/^\(([^\s]+)\)$/, '$1');
   const names = n.childForFieldName('names');
   const name = n.childForFieldName('name');
-  if (names) return children(names).map(c => c.text);
-  if (name) return [name.text];
+  if (names) return children(names).map(c => normalize(c.text));
+  if (name) return [normalize(name.text)];
+  const operator = children(n).find(c => c.type === 'infix')?.childForFieldName('operator');
+  if (operator) return [operator.text];
   const pattern = n.childForFieldName('pattern');
   if (pattern) return descendants(pattern, c => c.type === 'variable').map(c => c.text);
   return [];
+}
+export interface SourceSymbol {
+  names: string[]; kind: string; line: number; endLine: number;
+  owner?: string; signature?: string; source: string;
 }
 function references(n: SyntaxNode): Reference[] {
   return descendants(n, c => ['name', 'variable', 'constructor', 'operator'].includes(c.type))
@@ -107,7 +114,8 @@ export class Projector {
             let decl = signatures.get(name);
             if (!decl) {
               const type = inferred.get(name);
-              decl = add(n, 'signature', [name], `${name} :: ${type ?? '?  -- GHCで型を確認'}`);
+              const displayedName = /^[\p{L}_][\p{L}\p{N}_']*$/u.test(name) ? name : `(${name})`;
+              decl = add(n, 'signature', [name], `${displayedName} :: ${type ?? '?  -- GHCで型を確認'}`);
               decl.inferred = !!type;
               if (type) for (const token of new Set(type.match(/\b[A-Z][\w']*\b/g))) {
                 if (!decl.references.some(r => r.name === token)) decl.references.push({ name: token, line: decl.line, column: 0, inferred: true });
@@ -165,6 +173,50 @@ export class Projector {
       base.text = renderDesign(base);
       return base;
     } finally { tree.delete(); }
+  }
+  // Select syntax units, not line windows. Shared signatures do not cause a
+  // request for f to include g's body; guards, clauses and local where survive.
+  async sourceSymbols(source: string): Promise<SourceSymbol[]> {
+    await this.ready();
+    const tree = this.parser!.parse(source);
+    if (!tree) throw new Error('Could not parse Haskell source.');
+    const result: SourceSymbol[] = [];
+    const visit = (nodes: SyntaxNode[], owner?: string) => {
+      const signatures = new Map<string, string>();
+      for (const node of nodes.filter(n => n.type === 'signature')) for (const name of namesOf(node)) signatures.set(name, node.text);
+      const grouped = new Map<string, SourceSymbol>();
+      for (const node of nodes) {
+        if (comments.has(node.type) || ['header', 'import', 'signature'].includes(node.type)) continue;
+        let names = namesOf(node);
+        if (node.type === 'pattern_synonym') {
+          const form = children(node).find(c => c.type === 'equation' || c.type === 'signature');
+          const synonym = form?.childForFieldName('synonym');
+          names = synonym ? descendants(synonym, c => ['constructor', 'constructor_operator'].includes(c.type)).map(c => c.text) : [];
+          if (form?.type === 'signature') { for (const name of names) signatures.set(name, node.text); continue; }
+        }
+        if (bindings.has(node.type) || node.type === 'pattern_synonym') {
+          const key = names.length ? names.join('\0') : `@${node.startIndex}`;
+          const old = grouped.get(key);
+          if (old) { old.source += '\n' + node.text; old.endLine = node.endPosition.row + 1; continue; }
+          const signature = [...new Set(names.map(name => signatures.get(name)).filter(Boolean))].join('\n') || undefined;
+          const signatureNode = nodes.find(n => names.some(name => signatures.get(name) === n.text));
+          const item = { names, kind: node.type, line: (signatureNode ?? node).startPosition.row + 1, endLine: node.endPosition.row + 1, owner, signature, source: node.text };
+          grouped.set(key, item); result.push(item);
+        } else {
+          result.push({ names, kind: node.type, line: node.startPosition.row + 1, endLine: node.endPosition.row + 1, owner, source: node.text });
+          if (['class', 'instance'].includes(node.type)) {
+            const body = node.childForFieldName('declarations');
+            if (body) visit(children(body), node.text.slice(0, body.startIndex - node.startIndex).trim());
+          }
+        }
+      }
+      for (const [name, signature] of signatures) if (![...grouped.values()].some(item => item.names.includes(name))) {
+        const node = nodes.find(n => n.text === signature)!;
+        result.push({ names: [name], kind: 'signature', line: node.startPosition.row + 1, endLine: node.endPosition.row + 1, owner, source: signature });
+      }
+    };
+    try { visit(children(tree.rootNode).flatMap(n => ['imports', 'declarations'].includes(n.type) ? children(n) : [n])); return result; }
+    finally { tree.delete(); }
   }
   dispose(): void { this.parser?.delete(); }
 }
