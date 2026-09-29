@@ -11,15 +11,25 @@ the extension host that runs the Haskell tools, not only on the desktop host.
 Reuse an available Afterlight checkout containing `editors/haskell-design/`, or the
 user's existing Haskell Design installation. If this skill was copied alone, its
 public distribution is `https://github.com/M-simplifier/garden-of-afterlight.git`.
-The tested distribution is 0.5.0 at commit `485d376a1da3c6c33cd7b95c360569d601c1e038`.
+The tested distribution is 0.6.0 at commit `f13cf012d75e80f1d0914d23608daff07fe27a3a`.
 For a reproducible setup, clone it into an ignored local tools directory, check out
 that revision, and run **only `node editors/setup.mjs build`** from that checkout.
 The distribution's `prepare`, `configure`, standalone Neovim profile and `verify`
 are Afterlight-specific. Do not use them to configure the target game.
 
 Keep the MIT license and third-party notices with a copied distribution. A private
-dotfiles repository is never needed. Node.js 22+ builds the packages. The outputs
-are `editors/haskell-design/artifacts/haskell-design.vsix` and its Neovim archive.
+dotfiles repository is never needed. Building the viewer now needs GHC 9.6.7,
+Cabal, a C compiler, Node.js 22+, tar and strip. Pass the viewer's compiler to
+`build --ghc /path/to/ghc-9.6.7`; it may differ from the target game's GHC.
+Do not switch the game's compiler just to build this tool. `HASKELL_DESIGN_GHC`
+selects the compiler when running `npm run build` inside the tool package.
+The outputs are OS/CPU-specific VSIX and Neovim archives in
+`editors/haskell-design/artifacts/`; `haskell-design.vsix` is a local alias for
+that host's build. A Windows binary cannot serve a Linux/WSL extension host.
+The syntax CLI is `dist/haskell-design` (`.exe` on Windows); its built executable
+needs neither Node nor GHC. Keep `native-notices.txt` beside copied binaries and
+the sibling `compiler/` folder when using inference. Neovim still needs Node
+for the editor adapter; its source extraction runs in Haskell.
 Haskell Design is distributed as a VSIX, not a Marketplace extension: an extension
 recommendation cannot install it. Install the VSIX into the intended profile and
 install the official `haskell.haskell` extension for VS Code.
