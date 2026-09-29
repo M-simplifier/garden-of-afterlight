@@ -1,3 +1,12 @@
+# 0.6.0
+
+- Native Haskell declaration projection shared by the standalone CLI, VS Code and Neovim. The pinned Tree-sitter grammar now uses its native C runtime through a small FFI boundary.
+- Native `haskell-design map|outline|show`; syntax reading needs neither Node nor GHC at runtime. `read.cjs` remains a compatibility launcher.
+- Real Cabal syntax parsing, root-package scope, bounded whole-declaration pages and explicit trusted GHC inference. Source and cursor contracts remain in force.
+- OS/CPU-specific packages bundle the executable and dependency notices. Source builds now need GHC/Cabal and a C toolchain; Neovim still uses Node for its editor adapter.
+- Build, setup skill, portability guidance and measured Windows comparisons updated for the shared native core. See `docs/native.md`.
+- Offline definition navigation follows the editor's project scope and refuses ambiguous names, so a game type cannot jump into an unrelated bundled example.
+
 # 0.5.0
 
 - LLM用の `map` / `outline` / `show` を追加。エディタと同じ解析器から全体の型・データ定義と、選んだ実装を取得できます。

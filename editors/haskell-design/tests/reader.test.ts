@@ -114,7 +114,7 @@ test('class and instance methods are ambiguous until selected by file and line',
 });
 
 test('Cabal CRLF/common/conditional sources include Wasm even if editor verification excludes it', async () => {
-  const cabal = `name: demo\ncommon shared\n  hs-source-dirs: src\nexecutable native\n  import: shared\n  main-is: Main.hs\n  hs-source-dirs: app\n  if flag(browser)\n    hs-source-dirs: web\n`;
+  const cabal = `cabal-version: 2.4\nname: demo\nversion: 0.1.0\nflag browser\n  default: False\ncommon shared\n  hs-source-dirs: src\nexecutable native\n  import: shared\n  main-is: Main.hs\n  hs-source-dirs: app\n  if flag(browser)\n    hs-source-dirs: web\n`;
   const root = await fixture({ 'demo.cabal': cabal.replace(/\n/g, '\r\n'), 'src/Api.hs': source,
     'app/Main.hs': 'module Main where\nmain = pure ()\n', 'web/Main.hs': 'module Main where\nmain = pure ()\n',
     'docs/Example.hs': source, 'dist-newstyle/Generated.hs': source, 'src/fixtures/Negative.hs': source,

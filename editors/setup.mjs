@@ -70,11 +70,13 @@ async function doctor() {
 }
 async function build() {
   if (Number(process.versions.node.split('.')[0]) < 22) throw new Error('Building the packages requires Node.js 22 or newer.');
+  const { ghc, cabal } = await compiler();
   const npm = await executable(process.platform === 'win32' ? 'npm.cmd' : 'npm');
   const cli = npm.endsWith('.cmd') ? path.join(path.dirname(npm), 'node_modules/npm/bin/npm-cli.js') : npm;
   if (!await exists(cli)) throw new Error('npm-cli.js not found beside npm. Run the npm commands from editors/setup.md directly.');
   for (const argv of [['ci', '--ignore-scripts', '--no-audit', '--no-fund'], ['run', 'package'], ['run', 'package:neovim']]) {
-    run(process.execPath, [cli, ...argv], { cwd: tool, stdio: 'inherit', timeout: 600000 });
+    run(process.execPath, [cli, ...argv], { cwd: tool, stdio: 'inherit', timeout: 600000,
+      env: { ...process.env, HASKELL_DESIGN_GHC: ghc, HASKELL_DESIGN_CABAL: cabal } });
   }
 }
 async function prepare() {

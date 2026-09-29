@@ -10,6 +10,9 @@ LLMからも同じ解析器を使えます。`map` でファイル構造、`outl
 `show` で選んだ関数の実装を取得します。使い方とAfterlightでの削減量は
 [型からコードベースを読む](docs/reader.md)を参照してください。
 
+0.6.0では、宣言の抽出と読取CLIをHaskellへ統合しました。両エディタも同じネイティブ解析器を呼びます。
+構成と実測は[ネイティブ解析器](docs/native.md)にあります。
+
 ## できること
 
 - `data`、`newtype`、型の別名、GADT、型クラス、インスタンス、型族、説明コメントを表示。関数・メソッドの本体は必要なときだけ開閉できます。非公開の定義も対象です。
@@ -22,6 +25,9 @@ LLMからも同じ解析器を使えます。`map` でファイル構造、`outl
 ## VS Code
 
 VS Code 1.96以降。`artifacts/haskell-design.vsix` を **Extensions: Install from VSIX…** で選択します。HLSは必須ではありません。既存のHaskell言語拡張・ハイライト設定と併用できます。
+
+VSIXはOS・CPU別です。WSL・SSH・コンテナでは、拡張ホスト側に合う版を用意してください。
+配布済みの構文表示には、別途NodeやGHCをインストールする必要はありません。
 
 1. Haskellプロジェクトのフォルダと `.hs` ファイルを開く。設計ビューが最初から表示される。
 2. 「ソースを編集」または宣言の行番号で、同じエディタ領域をソースへ切り替える。
@@ -37,7 +43,8 @@ GHCの実行とGitアクセスにはVS Codeのワークスペース信頼が必�
 
 ## Neovim
 
-Neovim 0.11以降、Node.js 20以降。配布アーカイブにはビルド済みの共通解析器を同梱しています。プラグインのルートを `runtimepath` に追加します。
+Neovim 0.11以降、Node.js 20以降。OS・CPUに合う配布アーカイブを選びます。共通のHaskell解析器は同梱されています。
+Nodeはファイル監視・キャッシュ・エディタとの通信に使います。プラグインのルートを `runtimepath` に追加します。
 
 ```lua
 -- 展開先の絶対パスに置き換える
@@ -176,18 +183,23 @@ require('haskell-design').setup({ root = '/path/to/haskell-design/examples' })
 
 ## 開発・配布
 
-配布物のビルドにはNode.js 22以降が必要です。ビルド済みNeovim解析器の実行はNode.js 20以降に対応します。
+配布物のビルドにはNode.js 22以降、GHC 9.6.7、Cabal、Cコンパイラ、tar、stripが必要です。
+GHCのパスは `HASKELL_DESIGN_GHC` で指定できます。ビルド済みNeovimアダプターはNode.js 20以降に対応します。
+単体CLIの実行にはNodeもGHCも不要です。GHCによる型推論は別途9.6.xと対象プロジェクトの依存を使います。
 
 ```sh
-npm ci
+npm ci --ignore-scripts
 npm run check
 npm test
 npm run test:neovim
 npm run test:vscode
 npm run package
 node scripts/package-neovim.mjs
+npm run test:packages
 ```
 
 VS Codeの結合テストはmacOSの標準インストール先を使います。他の環境は `VSCODE_EXECUTABLE` を指定します。普段のプロファイルを変更せず、一時プロファイルとサンプルのコピーで実行します。GHCのテストには9.6.xが必要です。主要な検証結果と制限は [検証記録](docs/verification.md) を参照してください。
 
-構文解析はTree-sitter、意味の確認はGHC、ソース・差分・ファイル操作はエディタの責任として分けています。VS CodeはWebview内のソースをHTMLとして解釈せず、NeovimはJSONを標準入力で渡します。シェルへファイル名やソースを連結しません。
+構文解析はネイティブTree-sitter、宣言の抽出・関数選択・CLIはHaskell、意味の確認はGHCです。
+TypeScriptとLuaはエディタのUI、監視、キャッシュ、通信を担当します。VS CodeはWebview内のソースをHTMLとして解釈せず、
+プロセス間ではJSONを標準入力で渡します。シェルへファイル名やソースを連結しません。

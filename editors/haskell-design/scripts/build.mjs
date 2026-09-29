@@ -1,7 +1,7 @@
 import { build } from 'esbuild';
-import { mkdir, copyFile } from 'node:fs/promises';
+import { mkdir, rm } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
-import path from 'node:path';
+import './build-native.mjs';
 
 await mkdir('dist/tests', { recursive: true });
 await mkdir('artifacts', { recursive: true });
@@ -9,6 +9,7 @@ const entries = { cli: 'src/cli.ts', core: 'src/projector.ts', extension: 'src/e
 entries['tests/portable.test'] = 'tests/portable.test.ts';
 entries.read = 'src/read-cli.ts';
 entries['tests/reader.test'] = 'tests/reader.test.ts';
-await build({ entryPoints: Object.fromEntries(Object.entries(entries).filter(([,file]) => existsSync(file))), bundle: true, platform: 'node', format: 'cjs', target: 'node20', outdir: 'dist', outExtension: { '.js': '.cjs' }, external: ['vscode'], alias: { 'web-tree-sitter': path.resolve('node_modules/web-tree-sitter/tree-sitter.cjs') }, sourcemap: true });
-await copyFile('node_modules/web-tree-sitter/tree-sitter.wasm', 'dist/tree-sitter.wasm');
-await copyFile('node_modules/tree-sitter-haskell/tree-sitter-haskell.wasm', 'dist/tree-sitter-haskell.wasm');
+entries['tests/native.test'] = 'tests/native.test.ts';
+await build({ entryPoints: Object.fromEntries(Object.entries(entries).filter(([,file]) => existsSync(file))), bundle: true, platform: 'node', format: 'cjs', target: 'node20', outdir: 'dist', outExtension: { '.js': '.cjs' }, external: ['vscode'], sourcemap: true });
+// Remove old parser assets when updating an existing checkout.
+for (const name of ['tree-sitter.wasm', 'tree-sitter-haskell.wasm']) await rm(`dist/${name}`, { force: true });

@@ -6,27 +6,31 @@ Haskell Designの読取コマンドで、まずファイル構造・型・デー
 
 ## コマンドを用意する
 
-Afterlightのチェックアウトがあれば `editors/haskell-design/dist/read.cjs` を使う。
+Afterlightのチェックアウトがあれば `editors/haskell-design/dist/haskell-design` を使う。
+Windowsでは実行ファイル名に `.exe` を付ける。
 別repoへこのスキルだけをコピーした場合は、同梱の
 [haskell-editor-setupの配布元案内](../../haskell-editor-setup/references/other-projects.md#obtain-the-viewer)
-から、検証済みのソースを取得する。Haskell Design **0.5.0以降**が必要。
+から、検証済みのソースを取得する。ネイティブCLIにはHaskell Design **0.6.0以降**が必要。
 古いエディタ拡張しかない場合は、その設定を変更せず新しい読取コマンドを別のローカル
 ツールディレクトリへ用意してよい。個人のdotfilesは使わない。
 
 ソース配布の `editors/haskell-design/` で `npm ci --ignore-scripts` と `npm run build` を一度実行する。
-ビルドにはNode.js 22以降、ビルド済みの読取コマンドにはNode.js 20以降が必要。
-通常の一覧にはGHCもゲームのビルドも不要。生成物と取得したツールのコピーは対象repoでignoreする。
+ビルドにはNode.js 22以降、GHC 9.6.7、Cabal、Cコンパイラ、tar、stripが必要。
+`HASKELL_DESIGN_GHC` でツールをビルドするGHCを指定できる。ゲーム側のGHCは変更しない。
+配布物は実行するOS・CPUに合わせる。ビルド済みCLIの通常の一覧にはNodeもGHCもゲームのビルドも不要。
+実行ファイルには `dist/native-notices.txt`、型推論を使う場合は `compiler/` も添える。
+生成物と取得したツールのコピーは対象repoでignoreする。
 
 ## 全体をつかみ、必要な箇所を読む
 
-以下の `<reader>` は `dist/read.cjs` の絶対パス、`<project>` は**作業対象ゲーム**のルートに置き換える。
+以下の `<reader>` はネイティブ実行ファイルの絶対パス、`<project>` は**作業対象ゲーム**のルートに置き換える。
 配布元Afterlightを読むつもりがない限り、配布元を `--root` にしない。
 
 ```sh
-node <reader> map --root <project>
-node <reader> outline --root <project>
-node <reader> outline --root <project> --module Game.Rules
-node <reader> show --root <project> --module Game.Rules --symbol advance
+<reader> map --root <project>
+<reader> outline --root <project>
+<reader> outline --root <project> --module Game.Rules
+<reader> show --root <project> --module Game.Rules --symbol advance
 ```
 
 1. `map` のファイル一覧をCabalなどの実際のソース配置と照合する。

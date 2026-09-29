@@ -128,6 +128,19 @@ test('definition and test lookup returns source locations', async () => {
   const tests = await relatedTests(examples, ['confirm']);
   assert.ok(tests.some(t => t.file.endsWith('OrderSpec.hs')));
 });
+test('offline definition lookup follows project scope and never chooses an ambiguous type', async () => {
+  const game = await fs.mkdtemp(path.join(root, '.test-output/definition-'));
+  await fs.mkdir(path.join(game, 'src'));
+  await fs.mkdir(path.join(game, 'aaa-example'));
+  await fs.writeFile(path.join(game, '.haskell-design.json'), JSON.stringify({ version: 1, audit: { include: ['src'] } }));
+  await fs.writeFile(path.join(game, 'aaa-example/Types.hs'), 'module Example.Types where\ndata World = Example\n');
+  await fs.writeFile(path.join(game, 'src/Types.hs'), 'module Game.Types where\ndata World = Game\n');
+  assert.equal((await findDeclaration(projector, game, 'World'))?.file, path.join(game, 'src/Types.hs'));
+  await fs.writeFile(path.join(game, 'src/Other.hs'), 'module Game.Other where\ndata World = Other\n');
+  assert.equal(await findDeclaration(projector, game, 'World'), undefined);
+  const source = await projector.project('module Current where\ndata World = Unsaved\n', path.join(game, 'src/Current.hs'));
+  assert.equal((await findDeclaration(projector, game, 'World', source))?.file, source.file);
+});
 
 async function checked(name: string, source: string) {
   const file = path.join(fixture, name + '.hs'); await fs.writeFile(file, source);

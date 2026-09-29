@@ -6,7 +6,10 @@
 !THIRD_PARTY_NOTICES.md
 !dist/extension.cjs
 !dist/read.cjs
-!dist/*.wasm
+!dist/haskell-design
+!dist/haskell-design.exe
+!dist/native-platform.json
+!dist/native-notices.txt
 !media/**
 !compiler/**
 !examples/**

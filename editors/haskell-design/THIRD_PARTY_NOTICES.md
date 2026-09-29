@@ -1,8 +1,11 @@
 # Third-party notices
 
-Bundled parser runtime and grammar are distributed under their original MIT licenses. GHC itself is not bundled.
+The native executable statically links Haskell libraries and the GHC runtime.
+The compiler is not bundled. `dist/native-notices.txt` contains the notices for
+the libraries in the actual Cabal build plan; keep it with copied binaries.
+The native parser runtime and grammar retain their original MIT licenses below.
 
-## web-tree-sitter 0.25.10
+## Tree-sitter 0.25.10 (native C runtime)
 
 The MIT License (MIT)
 

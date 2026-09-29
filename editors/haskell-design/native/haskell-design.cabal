@@ -1,0 +1,25 @@
+cabal-version: 3.0
+name: haskell-design
+version: 0.6.0.0
+build-type: Simple
+license: MIT
+synopsis: Shared native Haskell declaration reader for editors and AI
+
+library
+  hs-source-dirs: src
+  exposed-modules: HaskellDesign.Tree, HaskellDesign.Model, HaskellDesign.Project, HaskellDesign.Scope, HaskellDesign.Reader, HaskellDesign.Verify
+  build-depends: base >=4.18 && <5, bytestring, text, containers, aeson ==2.2.5.0, cryptohash-sha256, filepath, directory, process, temporary, Cabal-syntax ==3.10.3.0
+  default-language: GHC2021
+  default-extensions: OverloadedStrings
+  ghc-options: -Wall
+  include-dirs: vendor/tree-sitter/lib/include, vendor/tree-sitter/lib/src, vendor/haskell/src
+  c-sources: cbits/tree.c, vendor/tree-sitter/lib/src/lib.c, vendor/haskell/src/parser.c, vendor/haskell/src/scanner.c
+  cc-options: -std=c11 -O2
+
+executable haskell-design
+  hs-source-dirs: app
+  main-is: Main.hs
+  build-depends: base >=4.18 && <5, haskell-design, aeson, bytestring, text, directory, filepath
+  default-language: GHC2021
+  default-extensions: OverloadedStrings
+  ghc-options: -Wall -threaded -rtsopts

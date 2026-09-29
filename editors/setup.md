@@ -12,9 +12,9 @@
 
 | ツール | この構成で使う版・役割 |
 | --- | --- |
-| Node.js | 22以降。拡張のビルドとNeovim側の解析器に使う |
+| Node.js | 22以降。拡張のビルドとNeovimの監視・通信に使う。単体CLIには不要 |
 | Git | 設計の差分に使う |
-| GHC | **9.6.7**。ビュワーのGHC API対応範囲は9.6.x |
+| GHC | **9.6.7**。共通解析器のビルドにも使う。型推論のGHC API対応範囲は9.6.x |
 | Cabal | cabal-version 3.8対応の版。Windows検証は3.12.1.0 |
 | Haskell Language Server | **GHC 9.6.7向けの実行ファイルを含む版**。Windows検証は2.14.0.0 |
 | Neovim | 0.11以降。追加のプラグイン管理ツールは不要 |
@@ -49,10 +49,13 @@ OSライブラリを揃えてください。Afterlightのネイティブホス�
 ## 2. 拡張をビルドする
 
 ```sh
-node editors/setup.mjs build
+node editors/setup.mjs build --ghc "GHC 9.6.7の絶対パス"
 ```
 
-固定した依存から、`editors/haskell-design/artifacts/` にVSIXとNeovim用アーカイブを作ります。
+PATHのGHCが9.6.7なら `--ghc` は省略できます。
+固定した依存から、`editors/haskell-design/artifacts/` に現在のOS・CPU用のVSIXとNeovim用アーカイブを作ります。
+ネイティブ解析器のソースをGHCとCコンパイラでビルドするため、tarとstripも必要です。
+WindowsのGHCup版では同梱のLLVM stripを使います。別のOSへコピーする場合は、そのOSでビルドしてください。
 エディタの起動時にnpmやコンパイラを自動インストールする仕組みではありません。
 手動で同じ操作をする場合は `editors/haskell-design/` で次を実行します。
 

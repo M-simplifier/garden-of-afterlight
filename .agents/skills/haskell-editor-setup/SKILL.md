@@ -10,9 +10,12 @@ declarations and inferred types, IO/Pure hints, implementation folding, navigati
 source/Undo round trips, design diffs, and HLS completion/diagnostics/formatting.
 Installing the extension alone is not completion.
 
-For AI code reading, version 0.5.0 also ships `dist/read.cjs`: `map`, `outline`,
-and `show`. Its syntax view needs only Node; do not require a full editor or GHC
-setup just to use it. Follow the distribution's `docs/reader.md` or the copied
+For AI code reading, version 0.6.0 ships the native Haskell executable
+`dist/haskell-design` (`.exe` on Windows): `map`, `outline`, and `show`.
+Its built syntax reader needs neither Node nor GHC. Building from source needs
+GHC 9.6.7, Cabal, a C toolchain, Node 22+, tar and strip. The Windows GHCup build
+uses its bundled LLVM strip. An editor installation is not needed just to read.
+Follow the distribution's `docs/reader.md` or the copied
 [code-reading reference](../fp-gamedev/references/code-reading.md).
 
 ## Choose the target project
@@ -58,8 +61,11 @@ project code in unrelated directories, or install tools during every editor star
 
 ## Build and connect
 
-1. Run `node editors/setup.mjs build`. It builds the VSIX and Neovim distribution
-   from the committed lockfile. Read errors; a declaration-only fallback is not a
+1. Run `node editors/setup.mjs build`, passing `--ghc` / `--cabal` when needed.
+   It builds the native Haskell core, VSIX and Neovim distribution for the current
+   OS/CPU from the committed lockfiles. Use a package matching the extension host
+   (including WSL/SSH/container), not just the desktop. Neovim still needs Node
+   for watching/caching/editor communication; the standalone CLI does not. Read errors; a declaration-only fallback is not a
    completed full setup.
 2. Run `prepare`, passing `--ghc`, `--cabal`, or `--hls` when the defaults differ.
    It builds dependencies for Afterlight's native and check components without

@@ -5,6 +5,7 @@ import { promisify } from 'node:util';
 import { hash, Projector, compareDesigns } from './projector';
 import { Design } from './model';
 import { isProjectConfig } from './projectConfig';
+import { auditScope } from './auditScope';
 
 export const execute = promisify(execFile);
 const ignored = new Set(['.git', 'node_modules', 'dist', 'dist-newstyle', '.stack-work', '.cabal', '.ghcup', '.test-output', '.haskell-design']);
@@ -97,11 +98,13 @@ export async function relatedTests(root: string, names: string[]): Promise<{ fil
 export async function findDeclaration(projector: Projector, root: string, name: string, preferred?: Design) {
   const local = preferred?.declarations.find(d => d.names.includes(name));
   if (local) return { file: preferred!.file, line: local.line };
-  const { files } = await listHaskellFiles(root);
+  const { files, truncated } = await auditScope(root);
+  if (truncated) throw new Error('定義の探索範囲が上限を超えました。プロジェクトの対象ソースを絞ってください。');
+  const matches: { file: string; line: number }[] = [];
   for (const file of files) {
     const design = await projector.project(await fs.readFile(file, 'utf8'), file);
     const declaration = design.declarations.find(d => d.names.includes(name));
-    if (declaration) return { file, line: declaration.line };
+    if (declaration) matches.push({ file, line: declaration.line });
   }
-  return undefined;
+  return matches.length === 1 ? matches[0] : undefined;
 }
